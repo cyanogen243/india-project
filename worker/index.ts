@@ -46,7 +46,7 @@ const worker = {
     const headers = secured.headers;
     headers.set(
       "Content-Security-Policy",
-      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; media-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+      "default-src 'self'; script-src 'self' https://platform.twitter.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://pbs.twimg.com https://abs.twimg.com; font-src 'self'; connect-src 'self'; media-src 'self'; frame-src https://platform.twitter.com https://syndication.twitter.com; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
     );
     headers.set("Referrer-Policy", "no-referrer");
     headers.set("X-Content-Type-Options", "nosniff");

@@ -85,3 +85,12 @@ not enter the signed verified feed until an editor opens the underlying report,
 checks its claims and sourcing, creates a structured bilingual record, and runs
 the validation pipeline. This keeps discovery fresh without automatically
 turning an unreviewed headline into a verified claim.
+
+## CJP live X feed
+
+The homepage and updates page include an X timeline for CJP's announced
+replacement handle, `@Cockroachisback`. The original `@cockroachjanta` account
+is currently suspended. Because X embeds contact a third party, the timeline is
+click-to-load, uses X's do-not-track setting, and always includes a direct-profile
+fallback. Social posts are labelled as unreviewed source material and never
+enter the signed verified feed automatically.

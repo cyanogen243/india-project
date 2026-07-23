@@ -12,6 +12,7 @@ import {
 } from "@/app/lib/content";
 import { LiveUpdates } from "./LiveUpdates";
 import { FreshSourceScan } from "./FreshSourceScan";
+import { CjpXFeed } from "./CjpXFeed";
 import { ShareReceipt } from "./ShareReceipt";
 import { SiteShell } from "./SiteShell";
 
@@ -142,6 +143,7 @@ function Home({ language }: { language: Language }) {
         <a href={hindi ? "/hi/safety" : "/safety"}>{hindi ? "समीक्षित सुरक्षा गाइड" : "Reviewed safety guide"} →</a>
       </section>
       <FreshSourceScan language={language} />
+      <CjpXFeed language={language} />
       <LiveUpdates language={language} initial={records} />
       <section className="two-column">
         <div>
@@ -174,6 +176,7 @@ function UpdatesPage({ language }: { language: Language }) {
     <>
       <PageHeader language={language} kind="updates" intro={language === "hi" ? "प्रकाशन, घटना और समाप्ति समय के साथ स्रोतयुक्त रिकॉर्ड। लाइव फ़ीड हर 30 सेकंड में नई प्रकाशित प्रति जाँचती है।" : "Sourced records with event, publication, and expiry times. The live feed checks for a newly published copy every 30 seconds."} />
       <FreshSourceScan language={language} />
+      <CjpXFeed language={language} />
       <StatusKey language={language} />
       <LiveUpdates language={language} initial={forLanguage(updates, language)} />
     </>

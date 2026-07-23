@@ -26,13 +26,18 @@ test("renders the verified public-interest homepage", async () => {
   const response = await render("/");
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
-  assert.match(response.headers.get("content-security-policy") ?? "", /default-src 'self'/);
+  const csp = response.headers.get("content-security-policy") ?? "";
+  assert.match(csp, /default-src 'self'/);
+  assert.match(csp, /script-src[^;]*https:\/\/platform\.twitter\.com/);
+  assert.match(csp, /frame-src[^;]*https:\/\/platform\.twitter\.com/);
 
   const html = await response.text();
   assert.match(html, /The India Project/);
   assert.match(html, /exam-accountability movement continues/i);
   assert.match(html, /Live verified feed/);
   assert.match(html, /New sources checked now/);
+  assert.match(html, /Updates from @Cockroachisback/);
+  assert.match(html, /Load live X feed/);
   assert.match(html, /Share verified receipt/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton|googleapis|<iframe/i);
 });
