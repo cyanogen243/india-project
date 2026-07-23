@@ -8,12 +8,13 @@
   "scripts": {
     "dev": "vinext dev",
     "build": "node scripts/validate-content.mjs && node scripts/build-feed.mjs && node scripts/check-security.mjs && vinext build",
+    "build:netlify": "node scripts/validate-content.mjs && node scripts/build-feed.mjs && node scripts/check-security.mjs && vite build --config vite.netlify.config.ts && node scripts/check-netlify-output.mjs",
     "build:feed": "node scripts/build-feed.mjs",
     "validate:content": "node scripts/validate-content.mjs",
     "check:security": "node scripts/check-security.mjs",
     "start": "vinext start",
     "test": "npm run build && node --test tests/rendered-html.test.mjs",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern .output --ignore-pattern .netlify"
   },
   "dependencies": {
     "next": "16.2.6",
@@ -30,6 +31,7 @@
     "@vitejs/plugin-rsc": "0.5.26",
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.6",
+    "nitro": "^3.0.260610-beta",
     "react-server-dom-webpack": "19.2.6",
     "tailwindcss": "4.2.1",
     "typescript": "5.9.3",

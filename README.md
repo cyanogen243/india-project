@@ -94,3 +94,13 @@ is currently suspended. Because X embeds contact a third party, the timeline is
 click-to-load, uses X's do-not-track setting, and always includes a direct-profile
 fallback. Social posts are labelled as unreviewed source material and never
 enter the signed verified feed automatically.
+
+## Netlify deployment
+
+Netlify uses the dedicated `build:netlify` command and
+`vite.netlify.config.ts`. Vinext's supported Nitro adapter emits public assets
+to `dist` and a Netlify server function, preserving server-rendered routes and the
+live `/api/source-scan` endpoint. Repository-level settings live in
+`netlify.toml`, which also sets `NETLIFY_NEXT_PLUGIN_SKIP=true` so an existing
+UI-installed `@netlify/plugin-nextjs` plugin is bypassed. The plugin can be
+removed from the Netlify UI later, but it no longer blocks the build.

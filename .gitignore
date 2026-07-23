@@ -16,6 +16,8 @@
 # next.js
 /.next/
 /.vinext/
+/.netlify/
+/.output/
 /out/
 
 # misc

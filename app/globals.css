@@ -1,5 +1,3 @@
-@import "tailwindcss";
-
 :root {
   --ink: #132c2d;
   --ink-soft: #395051;
@@ -13,8 +11,55 @@
   --max: 1180px;
 }
 
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
+  border-width: 0;
+  border-style: solid;
+  border-color: currentColor;
+}
+
+h1,
+h2,
+h3,
+p,
+figure,
+blockquote,
+dl,
+dd {
+  margin: 0;
+}
+
+ol,
+ul,
+menu {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+button,
+input,
+select,
+textarea {
+  margin: 0;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  background: transparent;
+}
+
+button {
+  cursor: pointer;
+}
+
+img,
+video {
+  display: block;
+  max-width: 100%;
+  height: auto;
 }
 
 html {
