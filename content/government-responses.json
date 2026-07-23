@@ -1,0 +1,70 @@
+[
+  {
+    "id": "memorandum-received",
+    "language": "en",
+    "authority": "Union government / Health Minister J. P. Nadda",
+    "title": "Protest memorandum received",
+    "summary": "AP and NDTV reported that a delegation met the minister on 20 July. NDTV reported that the memorandum would be examined through appropriate channels.",
+    "issuedAt": "2026-07-20T12:00:00+05:30",
+    "source": {
+      "label": "NDTV: Centre accepted memorandum and opened talks",
+      "url": "https://www.ndtv.com/india-news/security-measures-to-talks-how-centre-handled-escalation-of-cjp-protest-11797588",
+      "tier": "B",
+      "accessedAt": "2026-07-23T16:35:00+05:30"
+    },
+    "relatedDemandIds": [
+      "education-minister-resignation",
+      "exam-system-reform",
+      "family-compensation"
+    ]
+  },
+  {
+    "id": "fast-track-courts",
+    "language": "en",
+    "authority": "Prime Minister Narendra Modi",
+    "title": "Fast-track courts announced for examination paper-leak cases",
+    "summary": "The Associated Press reported the announcement on 23 July. The India Project has not yet located a primary order defining implementation.",
+    "issuedAt": "2026-07-23T12:00:00+05:30",
+    "source": {
+      "label": "Associated Press: India protest movement holds capital sit-in",
+      "url": "https://apnews.com/article/india-cockroach-party-youth-movement-protest-modi-d226d142657cd297c3d4232716a8a626",
+      "tier": "B",
+      "accessedAt": "2026-07-23T16:30:00+05:30"
+    },
+    "relatedDemandIds": ["exam-system-reform"]
+  },
+  {
+    "id": "memorandum-received",
+    "language": "hi",
+    "authority": "केंद्र सरकार / स्वास्थ्य मंत्री जे. पी. नड्डा",
+    "title": "प्रदर्शन का माँग-पत्र प्राप्त",
+    "summary": "एपी और एनडीटीवी के अनुसार प्रतिनिधिमंडल ने 20 जुलाई को मंत्री से मुलाकात की। एनडीटीवी के अनुसार माँग-पत्र को उचित माध्यम से देखा जाएगा।",
+    "issuedAt": "2026-07-20T12:00:00+05:30",
+    "source": {
+      "label": "एनडीटीवी: केंद्र ने माँग-पत्र स्वीकार किया",
+      "url": "https://www.ndtv.com/india-news/security-measures-to-talks-how-centre-handled-escalation-of-cjp-protest-11797588",
+      "tier": "B",
+      "accessedAt": "2026-07-23T16:35:00+05:30"
+    },
+    "relatedDemandIds": [
+      "education-minister-resignation",
+      "exam-system-reform",
+      "family-compensation"
+    ]
+  },
+  {
+    "id": "fast-track-courts",
+    "language": "hi",
+    "authority": "प्रधानमंत्री नरेंद्र मोदी",
+    "title": "परीक्षा प्रश्नपत्र-लीक मामलों के लिए फास्ट-ट्रैक अदालतों की घोषणा",
+    "summary": "एसोसिएटेड प्रेस ने 23 जुलाई को घोषणा की रिपोर्ट की। द इंडिया प्रोजेक्ट को अभी क्रियान्वयन पर प्राथमिक आदेश नहीं मिला है।",
+    "issuedAt": "2026-07-23T12:00:00+05:30",
+    "source": {
+      "label": "एसोसिएटेड प्रेस: राजधानी में धरना जारी",
+      "url": "https://apnews.com/article/india-cockroach-party-youth-movement-protest-modi-d226d142657cd297c3d4232716a8a626",
+      "tier": "B",
+      "accessedAt": "2026-07-23T16:30:00+05:30"
+    },
+    "relatedDemandIds": ["exam-system-reform"]
+  }
+]

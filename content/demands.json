@@ -1,0 +1,122 @@
+[
+  {
+    "id": "education-minister-resignation",
+    "language": "en",
+    "text": "Resignation or removal of Education Minister Dharmendra Pradhan.",
+    "approvedBy": "Cockroach Janta Party delegation, as reported by AP and NDTV",
+    "approvedAt": "2026-07-20T12:00:00+05:30",
+    "version": "20-Jul-2026",
+    "sources": [
+      {
+        "label": "Associated Press: Police use tear gas to stop march",
+        "url": "https://apnews.com/article/india-cockroach-janta-party-sonam-wangchuk-hunger-strike-cbeb4773e89d67250f0bcad1670fcd38",
+        "tier": "B",
+        "accessedAt": "2026-07-23T16:30:00+05:30"
+      },
+      {
+        "label": "NDTV: Centre accepted memorandum and opened talks",
+        "url": "https://www.ndtv.com/india-news/security-measures-to-talks-how-centre-handled-escalation-of-cjp-protest-11797588",
+        "tier": "B",
+        "accessedAt": "2026-07-23T16:35:00+05:30"
+      }
+    ]
+  },
+  {
+    "id": "exam-system-reform",
+    "language": "en",
+    "text": "Reforms to examination security, administration, and accountability.",
+    "approvedBy": "Youth-led protest movement, as reported by AP",
+    "approvedAt": "2026-07-20T12:00:00+05:30",
+    "version": "20-Jul-2026",
+    "sources": [
+      {
+        "label": "Associated Press: Movement explainer",
+        "url": "https://apnews.com/article/india-cockroach-party-youth-movement-protest-modi-59d045fbd485635def01b01f3898307b",
+        "tier": "B",
+        "accessedAt": "2026-07-23T16:30:00+05:30"
+      }
+    ]
+  },
+  {
+    "id": "family-compensation",
+    "language": "en",
+    "text": "Compensation for families of students reported to have died by suicide after paper-leak cases.",
+    "approvedBy": "Youth-led protest movement, as reported by AP and NDTV",
+    "approvedAt": "2026-07-20T12:00:00+05:30",
+    "version": "20-Jul-2026",
+    "sources": [
+      {
+        "label": "Associated Press: Movement explainer",
+        "url": "https://apnews.com/article/india-cockroach-party-youth-movement-protest-modi-59d045fbd485635def01b01f3898307b",
+        "tier": "B",
+        "accessedAt": "2026-07-23T16:30:00+05:30"
+      },
+      {
+        "label": "NDTV: Centre accepted memorandum and opened talks",
+        "url": "https://www.ndtv.com/india-news/security-measures-to-talks-how-centre-handled-escalation-of-cjp-protest-11797588",
+        "tier": "B",
+        "accessedAt": "2026-07-23T16:35:00+05:30"
+      }
+    ]
+  },
+  {
+    "id": "education-minister-resignation",
+    "language": "hi",
+    "text": "शिक्षा मंत्री धर्मेंद्र प्रधान का इस्तीफ़ा या पद से हटाया जाना।",
+    "approvedBy": "एपी और एनडीटीवी की रिपोर्ट के अनुसार कॉकक्रोच जनता पार्टी प्रतिनिधिमंडल",
+    "approvedAt": "2026-07-20T12:00:00+05:30",
+    "version": "20-जुलाई-2026",
+    "sources": [
+      {
+        "label": "एसोसिएटेड प्रेस: मार्च रोकने के लिए आँसू गैस",
+        "url": "https://apnews.com/article/india-cockroach-janta-party-sonam-wangchuk-hunger-strike-cbeb4773e89d67250f0bcad1670fcd38",
+        "tier": "B",
+        "accessedAt": "2026-07-23T16:30:00+05:30"
+      },
+      {
+        "label": "एनडीटीवी: केंद्र ने माँग-पत्र स्वीकार किया",
+        "url": "https://www.ndtv.com/india-news/security-measures-to-talks-how-centre-handled-escalation-of-cjp-protest-11797588",
+        "tier": "B",
+        "accessedAt": "2026-07-23T16:35:00+05:30"
+      }
+    ]
+  },
+  {
+    "id": "exam-system-reform",
+    "language": "hi",
+    "text": "परीक्षा सुरक्षा, प्रशासन और जवाबदेही में सुधार।",
+    "approvedBy": "एपी की रिपोर्ट के अनुसार युवा-नेतृत्व वाला आंदोलन",
+    "approvedAt": "2026-07-20T12:00:00+05:30",
+    "version": "20-जुलाई-2026",
+    "sources": [
+      {
+        "label": "एसोसिएटेड प्रेस: आंदोलन की व्याख्या",
+        "url": "https://apnews.com/article/india-cockroach-party-youth-movement-protest-modi-59d045fbd485635def01b01f3898307b",
+        "tier": "B",
+        "accessedAt": "2026-07-23T16:30:00+05:30"
+      }
+    ]
+  },
+  {
+    "id": "family-compensation",
+    "language": "hi",
+    "text": "प्रश्नपत्र-लीक मामलों के बाद आत्महत्या से मरने की रिपोर्ट वाले छात्रों के परिवारों को मुआवज़ा।",
+    "approvedBy": "एपी और एनडीटीवी की रिपोर्ट के अनुसार युवा-नेतृत्व वाला आंदोलन",
+    "approvedAt": "2026-07-20T12:00:00+05:30",
+    "version": "20-जुलाई-2026",
+    "sources": [
+      {
+        "label": "एसोसिएटेड प्रेस: आंदोलन की व्याख्या",
+        "url": "https://apnews.com/article/india-cockroach-party-youth-movement-protest-modi-59d045fbd485635def01b01f3898307b",
+        "tier": "B",
+        "accessedAt": "2026-07-23T16:30:00+05:30"
+      },
+      {
+        "label": "एनडीटीवी: केंद्र ने माँग-पत्र स्वीकार किया",
+        "url": "https://www.ndtv.com/india-news/security-measures-to-talks-how-centre-handled-escalation-of-cjp-protest-11797588",
+        "tier": "B",
+        "accessedAt": "2026-07-23T16:35:00+05:30"
+      }
+    ]
+  }
+]

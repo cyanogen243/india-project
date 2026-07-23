@@ -1,0 +1,66 @@
+[
+  {
+    "id": "ap-latest",
+    "language": "en",
+    "title": "Latest AP report: capital sit-in continues",
+    "kind": "Reported news",
+    "summary": "On-the-ground reporting from New Delhi, published 23 July 2026.",
+    "href": "https://apnews.com/article/india-cockroach-party-youth-movement-protest-modi-d226d142657cd297c3d4232716a8a626"
+  },
+  {
+    "id": "hrw-investigation",
+    "language": "en",
+    "title": "Human Rights Watch: excessive force investigation",
+    "kind": "Rights investigation",
+    "summary": "Nine witness interviews and analysis of ten verified videos.",
+    "href": "https://www.hrw.org/news/2026/07/23/india-excessive-force-used-against-student-protesters"
+  },
+  {
+    "id": "government-claim",
+    "language": "en",
+    "title": "Government response to social-media claims",
+    "kind": "Official position",
+    "summary": "Akashvani News report carrying the government and Delhi Police position.",
+    "href": "https://newsonair.gov.in/govt-refutes-false-claims-on-social-media-related-to-student-protest-in-delhi/"
+  },
+  {
+    "id": "indian-express-parliament",
+    "language": "en",
+    "title": "Indian Express: protest and Parliament",
+    "kind": "Reported news",
+    "summary": "Detailed reporting on the 20 July march and events inside Parliament.",
+    "href": "https://indianexpress.com/article/india/parliament-neet-cjp-protest-monsoon-session-10795819/"
+  },
+  {
+    "id": "ap-latest",
+    "language": "hi",
+    "title": "नवीनतम एपी रिपोर्ट: राजधानी में धरना जारी",
+    "kind": "समाचार रिपोर्ट",
+    "summary": "23 जुलाई 2026 को प्रकाशित नई दिल्ली की प्रत्यक्ष रिपोर्टिंग।",
+    "href": "https://apnews.com/article/india-cockroach-party-youth-movement-protest-modi-d226d142657cd297c3d4232716a8a626"
+  },
+  {
+    "id": "hrw-investigation",
+    "language": "hi",
+    "title": "ह्यूमन राइट्स वॉच: अत्यधिक बल की जाँच",
+    "kind": "अधिकार जाँच",
+    "summary": "नौ गवाहों के साक्षात्कार और दस सत्यापित वीडियो का विश्लेषण।",
+    "href": "https://www.hrw.org/news/2026/07/23/india-excessive-force-used-against-student-protesters"
+  },
+  {
+    "id": "government-claim",
+    "language": "hi",
+    "title": "सोशल मीडिया दावों पर सरकारी प्रतिक्रिया",
+    "kind": "आधिकारिक स्थिति",
+    "summary": "सरकार और दिल्ली पुलिस की स्थिति प्रकाशित करने वाली आकाशवाणी समाचार रिपोर्ट।",
+    "href": "https://newsonair.gov.in/govt-refutes-false-claims-on-social-media-related-to-student-protest-in-delhi/"
+  },
+  {
+    "id": "indian-express-parliament",
+    "language": "hi",
+    "title": "इंडियन एक्सप्रेस: प्रदर्शन और संसद",
+    "kind": "समाचार रिपोर्ट",
+    "summary": "20 जुलाई के मार्च और संसद के भीतर की घटनाओं पर विस्तृत रिपोर्ट।",
+    "href": "https://indianexpress.com/article/india/parliament-neet-cjp-protest-monsoon-session-10795819/"
+  }
+]
