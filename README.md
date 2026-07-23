@@ -11,7 +11,7 @@ precise live-location tracking, tactical maps, or public evidence uploader.
 ## Run locally
 
 ```sh
-npm install
+npm ci
 npm run dev
 ```
 
@@ -29,12 +29,12 @@ npm test
 
 The build validates source tiers, timestamps, language parity, high-sensitivity
 reviewer requirements, unsafe HTML, precise-location fields, and media review
-metadata. It then creates an Ed25519-signed feed in `public/feed/`.
+metadata. It then verifies the committed Ed25519-signed feed in `public/feed/`.
 
-On the first local build, a signing key is generated at
-`.private/feed-private.pem`. That directory is ignored by Git. Back up the key
-securely and set `FEED_SIGNING_PRIVATE_KEY` in production; changing the key
-changes the public verification key.
+Authorized editors can place the existing key at
+`.private/feed-private.pem` or set `FEED_SIGNING_PRIVATE_KEY` to regenerate the
+feed. The private directory is ignored by Git. Changing the key changes the
+public verification identity.
 
 ## Editorial workflow
 
@@ -104,3 +104,21 @@ live `/api/source-scan` endpoint. Repository-level settings live in
 `netlify.toml`, which also sets `NETLIFY_NEXT_PLUGIN_SKIP=true` so an existing
 UI-installed `@netlify/plugin-nextjs` plugin is bypassed. The plugin can be
 removed from the Netlify UI later, but it no longer blocks the build.
+
+## Standalone repository
+
+A fresh clone contains every public resource required to build and run the
+site: bilingual content, PDFs, PWA files, social artwork, the signed public
+feed, its signature and public key, Netlify configuration, and the Cloudflare
+worker target. Run `npm ci`, then `npm run build` or
+`npm run build:netlify`.
+
+No secret is required for an ordinary build. Without the private signing key,
+the build verifies that the committed feed is authentic and matches the source
+content. Authorized publishers can set `FEED_SIGNING_PRIVATE_KEY` to regenerate
+the feed after editorial changes. The private key, original evidence, and
+unredacted media must never be committed.
+
+Runtime source discovery still depends on Google News India and the Press
+Information Bureau. The optional CJP timeline connects to X only after a
+visitor chooses to load it.
