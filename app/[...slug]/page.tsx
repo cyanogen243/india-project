@@ -12,7 +12,6 @@ const kinds = [
   "evidence",
   "text",
   "offline",
-  "hall-of-shame",
   "receipts",
   "editorial-standard",
 ] satisfies PageKind[];
@@ -41,7 +40,12 @@ export default async function CatchAllPage({
     ? "home"
     : pagePart) as PageKind;
 
-  if (kind !== "home" && !kinds.includes(kind)) notFound();
+  if (
+    kind !== "home" &&
+    !(kinds as readonly PageKind[]).includes(kind)
+  ) {
+    notFound();
+  }
   if (language === "hi" && kind === "offline") notFound();
 
   return <PublicPage language={language} kind={kind} />;

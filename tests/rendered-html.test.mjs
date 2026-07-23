@@ -40,21 +40,26 @@ test("renders the verified public-interest homepage", async () => {
   assert.match(html, /Updates from @Cockroachisback/);
   assert.match(html, /Load live X feed/);
   assert.match(html, /Share verified receipt/);
+  assert.doesNotMatch(html, /Hall of Shame|\/hall-of-shame/i);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton|googleapis|<iframe/i);
 });
 
 test("renders Hindi, receipts, and the no-upload evidence page", async () => {
-  const [hindi, receipts, evidence] = await Promise.all([
+  const [hindi, receipts, evidence, hiddenMediaArchive] = await Promise.all([
     render("/hi"),
     render("/receipts"),
     render("/evidence"),
+    render("/hall-of-shame"),
   ]);
 
   assert.equal(hindi.status, 200);
   assert.equal(receipts.status, 200);
   assert.equal(evidence.status, 200);
+  assert.equal(hiddenMediaArchive.status, 404);
 
-  assert.match(await hindi.text(), /परीक्षा जवाबदेही आंदोलन जारी/);
+  const hindiHtml = await hindi.text();
+  assert.match(hindiHtml, /परीक्षा जवाबदेही आंदोलन जारी/);
+  assert.doesNotMatch(hindiHtml, /\/hi\/hall-of-shame/i);
   const receiptsHtml = await receipts.text();
   assert.match(receiptsHtml, /Share the receipts/);
   assert.match(receiptsHtml, /Share verified receipt/);

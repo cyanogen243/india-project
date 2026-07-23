@@ -50,7 +50,9 @@ The current records use publicly available reporting from the Associated Press,
 Human Rights Watch, Akashvani News, NDTV, and The Indian Express. These records
 must continue to be reviewed and expired as the situation changes.
 
-## Hall of Shame media workflow
+## Private media review workflow
+
+There is currently no public media-archive route or navigation entry.
 
 Do not publish directly from a private Drive folder.
 

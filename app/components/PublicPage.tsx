@@ -161,7 +161,6 @@ function Home({ language }: { language: Language }) {
         <div className="quick-links">
           <p className="eyebrow">{hindi ? "त्वरित पहुँच" : "Quick access"}</p>
           <a href={hindi ? "/hi/legal" : "/legal"}><span>{hindi ? "कानूनी तैयारी" : "Legal preparation"}</span><strong>→</strong></a>
-          <a href={hindi ? "/hi/hall-of-shame" : "/hall-of-shame"}><span>{hindi ? "जवाबदेही अभिलेख" : "Accountability archive"}</span><strong>→</strong></a>
           <a href={hindi ? "/hi/receipts" : "/receipts"}><span>{hindi ? "सत्यापित रसीदें साझा करें" : "Share verified receipts"}</span><strong>→</strong></a>
           <a href={hindi ? "/hi/evidence" : "/evidence"}><span>{hindi ? "साक्ष्य नीति" : "Evidence policy"}</span><strong>→</strong></a>
           <a href={hindi ? "/hi/corrections" : "/corrections"}><span>{hindi ? "सुधार लॉग" : "Correction log"}</span><strong>→</strong></a>
