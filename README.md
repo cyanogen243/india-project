@@ -70,3 +70,18 @@ remains a non-uploading placeholder.
 `/receipts` turns verified updates into compact source-and-timestamp cards.
 Mobile devices use the system share sheet; other browsers copy a text receipt
 with `#TheIndiaProject` and `#VerifyBeforeYouAmplify`.
+
+## On-visit source freshness
+
+Every homepage and updates-page visit calls `/api/source-scan` with caching
+disabled. The server searches Google News India for recent student-protest,
+university-protest, examination-protest, and paper-leak reporting, and checks
+the Government of India Press Information Bureau feed for new official
+education responses. The browser repeats the scan every five minutes while the
+page remains open and shows the exact check time and any source failure.
+
+Newly discovered headlines are deliberately labelled `review pending`. They do
+not enter the signed verified feed until an editor opens the underlying report,
+checks its claims and sourcing, creates a structured bilingual record, and runs
+the validation pipeline. This keeps discovery fresh without automatically
+turning an unreviewed headline into a verified claim.

@@ -32,6 +32,7 @@ test("renders the verified public-interest homepage", async () => {
   assert.match(html, /The India Project/);
   assert.match(html, /exam-accountability movement continues/i);
   assert.match(html, /Live verified feed/);
+  assert.match(html, /New sources checked now/);
   assert.match(html, /Share verified receipt/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton|googleapis|<iframe/i);
 });
