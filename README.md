@@ -107,6 +107,26 @@ live `/api/source-scan` endpoint. Repository-level settings live in
 UI-installed `@netlify/plugin-nextjs` plugin is bypassed. The plugin can be
 removed from the Netlify UI later, but it no longer blocks the build.
 
+## Vercel deployment
+
+The default scripts use standard Next.js commands and are ready for Vercel's
+zero-configuration Next.js deployment. Import this repository, keep the root
+directory and framework preset defaults, and deploy. The live
+`/api/source-scan` route runs as a Vercel Function.
+
+No environment variable is required. Set `NEXT_PUBLIC_SITE_URL` to the final
+custom domain for canonical social metadata. Set
+`NEXT_PUBLIC_VOLUNTEER_URL` only when replacing the public GitHub volunteer
+template with an approved private intake page.
+
+Vercel and the other deployment targets remain separate:
+
+```sh
+npm run build          # Vercel / standard Next.js
+npm run build:netlify  # Netlify
+npm run build:sites    # OpenAI Sites
+```
+
 ## Standalone repository
 
 A fresh clone contains every public resource required to build and run the

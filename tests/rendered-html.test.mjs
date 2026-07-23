@@ -34,6 +34,12 @@ test("renders the verified public-interest homepage", async () => {
 
   const html = await response.text();
   assert.match(html, /The India Project/);
+  assert.match(html, /brand-mark/);
+  assert.match(
+    html,
+    /<link rel="icon" href="(?:https?:\/\/[^"]+)?\/brand-mark\.svg"/,
+  );
+  assert.doesNotMatch(html, /class="brand-mark"[^>]*>S</);
   assert.match(html, /exam-accountability movement continues/i);
   assert.match(html, /Live verified feed/);
   assert.match(html, /New sources checked now/);

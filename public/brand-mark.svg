@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title>The India Project verified public record</title>
+  <rect width="64" height="64" rx="2" fill="#132c2d"/>
+  <path d="M15 10h28l8 8v36H15z" fill="#f4f1e9"/>
+  <path d="M43 10v10h8" fill="#d8d0c0"/>
+  <path d="M43 10v10h8" fill="none" stroke="#132c2d" stroke-width="2"/>
+  <path d="M23 28h20M23 35h15" fill="none" stroke="#395051" stroke-width="3"/>
+  <path d="m23 44 5 5 13-14" fill="none" stroke="#9b2c2c" stroke-linecap="square" stroke-linejoin="miter" stroke-width="5"/>
+</svg>

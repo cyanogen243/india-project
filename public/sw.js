@@ -1,6 +1,11 @@
-const CACHE = "the-india-project-v2";
+const CACHE = "the-india-project-v3";
 const ESSENTIAL = [
   "/",
+  "/brand-mark.svg",
+  "/icon-192.png",
+  "/icon-512.png",
+  "/apple-touch-icon.png",
+  "/manifest.webmanifest",
   "/hi",
   "/updates",
   "/hi/updates",

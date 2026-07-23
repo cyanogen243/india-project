@@ -1,0 +1,35 @@
+name: Volunteer interest
+description: Offer remote help with translation, source review, or accessibility.
+title: "Volunteer: "
+labels:
+  - volunteer
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for offering your time. This issue is public. Do not share a phone number, address, precise location, legal name, or sensitive files here.
+  - type: dropdown
+    id: role
+    attributes:
+      label: Area
+      options:
+        - Hindi and English translation
+        - Public-source and timestamp review
+        - Accessibility and low-bandwidth review
+        - Editorial or technical support
+    validations:
+      required: true
+  - type: textarea
+    id: contribution
+    attributes:
+      label: How would you like to help?
+      description: A short description is enough. Use only information you are comfortable making public.
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Privacy check
+      options:
+        - label: I have not included sensitive or identifying information.
+          required: true

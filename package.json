@@ -3,21 +3,25 @@
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": ">=22.13.0"
+    "node": "24.x"
   },
   "scripts": {
-    "dev": "vinext dev",
-    "build": "node scripts/validate-content.mjs && node scripts/build-feed.mjs && node scripts/check-security.mjs && vinext build",
+    "dev": "next dev",
+    "build": "node scripts/validate-content.mjs && node scripts/build-feed.mjs && node scripts/check-security.mjs && next build",
+    "start": "next start",
+    "dev:sites": "vinext dev",
+    "build:sites": "node scripts/validate-content.mjs && node scripts/build-feed.mjs && node scripts/check-security.mjs && vinext build",
+    "start:sites": "vinext start",
     "build:netlify": "node scripts/validate-content.mjs && node scripts/build-feed.mjs && node scripts/check-security.mjs && vite build --config vite.netlify.config.ts && node scripts/check-netlify-output.mjs",
     "build:feed": "node scripts/build-feed.mjs",
     "validate:content": "node scripts/validate-content.mjs",
     "check:security": "node scripts/check-security.mjs",
-    "start": "vinext start",
-    "test": "npm run build && node --test tests/rendered-html.test.mjs",
+    "test": "npm run build && node --test tests/vercel-rendered-html.test.mjs",
+    "test:sites": "npm run build:sites && node --test tests/rendered-html.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern .output --ignore-pattern .netlify"
   },
   "dependencies": {
-    "next": "16.2.6",
+    "next": "16.2.11",
     "react": "19.2.6",
     "react-dom": "19.2.6"
   },
@@ -30,7 +34,7 @@
     "@vitejs/plugin-react": "6.0.2",
     "@vitejs/plugin-rsc": "0.5.26",
     "eslint": "9.39.4",
-    "eslint-config-next": "16.2.6",
+    "eslint-config-next": "16.2.11",
     "nitro": "^3.0.260610-beta",
     "react-server-dom-webpack": "19.2.6",
     "tailwindcss": "4.2.1",
@@ -38,6 +42,10 @@
     "vinext": "0.0.50",
     "vite": "8.0.13",
     "wrangler": "4.92.0"
+  },
+  "overrides": {
+    "postcss": "8.5.14",
+    "sharp": "0.35.0"
   },
   "type": "module"
 }
