@@ -34,18 +34,19 @@ test("renders the verified public-interest homepage", async () => {
 
   const html = await response.text();
   assert.match(html, /The India Project/);
-  assert.match(html, /brand-mark/);
   assert.match(
     html,
-    /<link rel="icon" href="(?:https?:\/\/[^"]+)?\/brand-mark\.svg"/,
+    /<link rel="icon" href="(?:https?:\/\/[^"]+)?\/brand\/compact-logo\.png"/,
   );
-  assert.doesNotMatch(html, /class="brand-mark"[^>]*>S</);
+  assert.match(html, /Safe · Verified · People powered/i);
   assert.match(html, /exam-accountability movement continues/i);
   assert.match(html, /Live verified feed/);
   assert.match(html, /New sources checked now/);
   assert.match(html, /Updates from @Cockroachisback/);
   assert.match(html, /Load live X feed/);
   assert.match(html, /Share verified receipt/);
+  assert.match(html, /Volunteer with us/);
+  assert.match(html, /What is happening, and why it matters/);
   assert.doesNotMatch(html, /Hall of Shame|\/hall-of-shame/i);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton|googleapis|<iframe/i);
 });

@@ -10,6 +10,8 @@ const nav = {
     ["Safety", "/safety"],
     ["Legal", "/legal"],
     ["Share receipts", "/receipts"],
+    ["Resources", "/resources"],
+    ["Volunteer", "/volunteer"],
     ["Reading room", "/reading-room"],
   ],
   hi: [
@@ -19,6 +21,8 @@ const nav = {
     ["सुरक्षा", "/hi/safety"],
     ["कानूनी", "/hi/legal"],
     ["रसीद साझा करें", "/hi/receipts"],
+    ["संसाधन", "/hi/resources"],
+    ["स्वयंसेवा", "/hi/volunteer"],
     ["पठन कक्ष", "/hi/reading-room"],
   ],
 } satisfies Record<Language, string[][]>;
@@ -63,7 +67,7 @@ export function SiteShell({
             <span className="brand-mark" aria-hidden="true" />
             <span>
               <strong>The India Project</strong>
-              <small>{hindi ? "सत्यापित छात्र जनहित अभिलेख" : "Verified student public-interest record"}</small>
+              <small>{hindi ? "सुरक्षित · सत्यापित · लोगों द्वारा संचालित" : "Safe · Verified · People powered"}</small>
             </span>
           </a>
           <nav aria-label={hindi ? "मुख्य नेविगेशन" : "Main navigation"}>
@@ -99,7 +103,7 @@ export function SiteShell({
         <p className="footer-note">
           {hindi
             ? "कोई विश्लेषिकी, कुकी, खाता या सार्वजनिक अपलोड नहीं।"
-            : "No analytics, cookies, accounts, or public uploads."}
+            : "No analytics, precise location tracking, or public file uploads."}
         </p>
       </footer>
       <ServiceWorkerRegister />

@@ -26,7 +26,17 @@ for (const path of paths) {
   if (/next\/font\/google|fonts\.googleapis\.com/i.test(source)) {
     throw new Error(`${path}: third-party fonts are forbidden`);
   }
-  if (/<form/i.test(source)) throw new Error(`${path}: public forms are not allowed in v1`);
+  if (/<form/i.test(source)) {
+    const approvedForm =
+      path.endsWith("app\\components\\VolunteerForm.tsx") ||
+      path.endsWith("app/components/VolunteerForm.tsx") ||
+      path.endsWith("app\\admin\\AdminApp.tsx") ||
+      path.endsWith("app/admin/AdminApp.tsx");
+    if (!approvedForm) throw new Error(`${path}: unreviewed form surface`);
+    if (/type=["']file["']/i.test(source)) {
+      throw new Error(`${path}: file uploads remain forbidden`);
+    }
+  }
 }
 
 const worker = await readFile("worker/index.ts", "utf8");

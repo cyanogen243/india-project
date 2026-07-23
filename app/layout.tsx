@@ -1,4 +1,8 @@
 import type { Metadata } from "next";
+import "@fontsource/anton/400.css";
+import "@fontsource/inter/400.css";
+import "@fontsource/inter/600.css";
+import "@fontsource/inter/700.css";
 import "./globals.css";
 
 function getSiteUrl() {
@@ -14,16 +18,16 @@ function getSiteUrl() {
 export const metadata: Metadata = {
   metadataBase: getSiteUrl(),
   title: {
-    default: "The India Project — Verified Student Public-Interest Record",
+    default: "The India Project — Safe. Verified. People Powered.",
     template: "%s · The India Project",
   },
   description:
-    "Verified, bilingual public information, safety guidance, documentation, and accountability records for student movements.",
+    "Clear, verified, bilingual civic information, safety guidance, source records, and visible corrections.",
   applicationName: "The India Project",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [
-      { url: "/brand-mark.svg", type: "image/svg+xml" },
+      { url: "/brand/compact-logo.png", type: "image/png" },
       { url: "/icon-192.png", type: "image/png", sizes: "192x192" },
     ],
     apple: [
@@ -31,17 +35,17 @@ export const metadata: Metadata = {
     ],
   },
   openGraph: {
-    title: "The India Project — Verified Student Public-Interest Record",
+    title: "The India Project — Safe. Verified. People Powered.",
     description:
-      "Quiet, sourced, bilingual public information with offline access and visible corrections.",
+      "Make participation safer. Make information clearer. Make evidence harder to erase.",
     type: "website",
     images: ["/og.png"],
   },
   twitter: {
     card: "summary_large_image",
-    title: "The India Project — Verified Student Public-Interest Record",
+    title: "The India Project — Safe. Verified. People Powered.",
     description:
-      "Quiet, sourced, bilingual public information with offline access and visible corrections.",
+      "Make participation safer. Make information clearer. Make evidence harder to erase.",
     images: ["/og.png"],
   },
 };

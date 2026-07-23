@@ -1,144 +1,138 @@
 # The India Project
 
-A bilingual, static-first public-interest information hub for verified student
-movement updates in India. It publishes broad-zone updates, demands, government
-responses, a factual timeline, safety material, source documents, corrections,
-offline packs, signed feeds, and a reviewed-media archive.
+The India Project is a bilingual, public-interest information hub for verified
+student-movement and civic information in India.
 
-The public site intentionally has no accounts, comments, analytics, cookies,
-precise live-location tracking, tactical maps, or public evidence uploader.
+**Safe. Verified. People Powered.**
 
-## Run locally
+The public site combines reviewed updates, demands, government responses,
+timelines, safety material, corrections, trusted resources, offline packs, a
+signed feed, and a privacy-conscious volunteer form. It does not publish live
+locations, accept evidence files, or expose the private admin workspace.
+
+## Local setup
+
+Requirements: Node.js 24 and npm.
 
 ```sh
 npm ci
+copy .env.example .env.local
+npm run db:setup
+npm run admin:bootstrap
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+Open `http://localhost:3000`. The public site is at `/`, volunteer intake is at
+`/volunteer`, and the protected workspace is at `/admin`.
 
-## Validate and build
+`npm run dev` runs the idempotent database setup automatically. The standalone
+default is `file:./data/the-india-project.db`; database files and secrets are
+ignored.
+
+The first `npm run admin:bootstrap` command prompts for a super-admin email,
+display name, and password. It refuses to create a second initial super-admin.
+The super-admin can create admins or additional super-admins in `/admin`.
+Generated one-time passwords expire after 24 hours and must be changed at first
+sign-in.
+
+## Database and production configuration
+
+The schema is defined in `db/schema.ts` and checked-in SQL migrations live in
+`db/migrations/`. Runtime setup and content seeding are idempotent.
+
+For hosted Turso/libSQL, set:
+
+```text
+LIBSQL_URL=libsql://your-database.turso.io
+LIBSQL_AUTH_TOKEN=...
+SESSION_SECRET=...
+RATE_LIMIT_SECRET=...
+FEED_SIGNING_PRIVATE_KEY=...
+NEXT_PUBLIC_SITE_URL=https://your-domain.example
+```
+
+Use a different high-entropy value for each secret. Rotate a session secret by
+replacing it and revoking sessions; rotate the rate-limit secret independently.
+Changing the Ed25519 feed key changes the public verification identity, so
+publish the corresponding new public key deliberately.
+
+The editable database is seeded from the repository’s bilingual JSON records
+and reviewed resource list. This makes a fresh clone useful without a cloud
+account while allowing the same code to use hosted libSQL.
+
+## Admin roles and workflows
+
+- **Admin:** view and manage volunteer records; draft, edit, delete, and publish
+  editorial collections.
+- **Super-admin:** all admin permissions plus create, reset, enable, and disable
+  users. The last active super-admin and the current user cannot be disabled.
+
+All mutations create append-only audit events. Sessions are revocable, HttpOnly,
+SameSite-strict cookies. Mutations require a session-bound CSRF token. Passwords
+use salted PBKDF2-HMAC-SHA256 with 600,000 iterations, failed logins perform the
+same derivation work for known and unknown accounts, and attempts are throttled.
+
+Volunteer intake collects only a name or alias, email, skills, languages,
+availability, a short note, and consent. It deliberately omits phone numbers,
+IDs, files, and precise locations. Declined and archived records become cleanup
+eligible after 180 days and can be explicitly deleted by an admin.
+
+Editorial content is saved as drafts and published per collection. Existing
+source tiers, bilingual parity, timestamps, reviewer requirements, unsafe HTML,
+and precise-location restrictions are enforced again at publication.
+
+Publishing the updates collection atomically creates a canonical Ed25519-signed
+feed release. These stable interfaces remain available:
+
+- `/feed/updates.json`
+- `/feed/updates.sig`
+- `/feed/public-key.txt`
+
+Place a local signing key at `.private/feed-private.pem`, or set
+`FEED_SIGNING_PRIVATE_KEY`. The committed static feed remains the read-only
+fallback until a database release is published.
+
+## Content freshness and external services
+
+Every homepage and updates-page visit calls `/api/source-scan` without caching.
+The browser repeats the scan every five minutes. Discovered headlines stay
+labelled `review pending`; they never enter the verified feed automatically.
+
+The CJP X timeline remains click-to-load and never enters the signed feed
+automatically. The resources directory distinguishes official, established,
+and community-built links. The Shutdown Kit is explicitly labelled as an
+external community toolkit rather than a verified TIP service.
+
+## Brand system
+
+The supplied source guide is committed at
+`docs/brand/TIP Brand Guidelines.pdf`. Approved logos are in `public/brand/`.
+Anton and Inter are bundled through the open-source Fontsource packages, so no
+runtime font request is made to Google.
+
+Regenerate app icons from the approved primary mark with:
 
 ```sh
+npm run build:brand
+```
+
+## Validation
+
+```sh
+npm run db:setup
 npm run validate:content
-npm run build:feed
 npm run check:security
-npm run build
+npm run typecheck
+npm run lint
 npm test
+npm run test:sites
 ```
 
-The build validates source tiers, timestamps, language parity, high-sensitivity
-reviewer requirements, unsafe HTML, precise-location fields, and media review
-metadata. It then verifies the committed Ed25519-signed feed in `public/feed/`.
-
-Authorized editors can place the existing key at
-`.private/feed-private.pem` or set `FEED_SIGNING_PRIVATE_KEY` to regenerate the
-feed. The private directory is ignored by Git. Changing the key changes the
-public verification identity.
-
-## Editorial workflow
-
-1. Edit structured records in `content/`.
-2. Use broad zones only. Never add coordinates, precise addresses, or live
-   positions of protesters, police, medics, organisers, or shelters.
-3. Link every public claim to a source and access time.
-4. Give high-sensitivity records at least two reviewers.
-5. Add a correction record whenever a material published claim changes.
-6. Run the complete build before review and publication.
-
-The current records use publicly available reporting from the Associated Press,
-Human Rights Watch, Akashvani News, NDTV, and The Indian Express. These records
-must continue to be reviewed and expired as the situation changes.
-
-## Private media review workflow
-
-There is currently no public media-archive route or navigation entry.
-
-Do not publish directly from a private Drive folder.
-
-1. Import originals into a separate restricted archive.
-2. Preserve originals and record custody metadata.
-3. Verify date and broad zone using independent sources.
-4. Redact faces, number plates, identifying audio, and sensitive details.
-5. Obtain legal review and two editorial approvals.
-6. Put only the approved public derivative in `public/media/`.
-7. Add its metadata to `content/media.json`.
-
-`public/media/README.md` documents the required fields. The public evidence page
-remains a non-uploading placeholder.
-
-## Share the receipts
-
-`/receipts` turns verified updates into compact source-and-timestamp cards.
-Mobile devices use the system share sheet; other browsers copy a text receipt
-with `#TheIndiaProject` and `#VerifyBeforeYouAmplify`.
-
-## On-visit source freshness
-
-Every homepage and updates-page visit calls `/api/source-scan` with caching
-disabled. The server searches Google News India for recent student-protest,
-university-protest, examination-protest, and paper-leak reporting, and checks
-the Government of India Press Information Bureau feed for new official
-education responses. The browser repeats the scan every five minutes while the
-page remains open and shows the exact check time and any source failure.
-
-Newly discovered headlines are deliberately labelled `review pending`. They do
-not enter the signed verified feed until an editor opens the underlying report,
-checks its claims and sourcing, creates a structured bilingual record, and runs
-the validation pipeline. This keeps discovery fresh without automatically
-turning an unreviewed headline into a verified claim.
-
-## CJP live X feed
-
-The homepage and updates page include an X timeline for CJP's announced
-replacement handle, `@Cockroachisback`. The original `@cockroachjanta` account
-is currently suspended. Because X embeds contact a third party, the timeline is
-click-to-load, uses X's do-not-track setting, and always includes a direct-profile
-fallback. Social posts are labelled as unreviewed source material and never
-enter the signed verified feed automatically.
-
-## Netlify deployment
-
-Netlify uses the dedicated `build:netlify` command and
-`vite.netlify.config.ts`. Vinext's supported Nitro adapter emits public assets
-to `dist` and a Netlify server function, preserving server-rendered routes and the
-live `/api/source-scan` endpoint. Repository-level settings live in
-`netlify.toml`, which also sets `NETLIFY_NEXT_PLUGIN_SKIP=true` so an existing
-UI-installed `@netlify/plugin-nextjs` plugin is bypassed. The plugin can be
-removed from the Netlify UI later, but it no longer blocks the build.
-
-## Vercel deployment
-
-The default scripts use standard Next.js commands and are ready for Vercel's
-zero-configuration Next.js deployment. Import this repository, keep the root
-directory and framework preset defaults, and deploy. The live
-`/api/source-scan` route runs as a Vercel Function.
-
-No environment variable is required. Set `NEXT_PUBLIC_SITE_URL` to the final
-custom domain for canonical social metadata.
-
-Vercel and the other deployment targets remain separate:
+Deployment targets remain separate:
 
 ```sh
-npm run build          # Vercel / standard Next.js
-npm run build:netlify  # Netlify
-npm run build:sites    # OpenAI Sites
+npm run build          # standard Next.js / Vercel
+npm run build:sites    # OpenAI Sites / vinext
 ```
 
-## Standalone repository
-
-A fresh clone contains every public resource required to build and run the
-site: bilingual content, PDFs, PWA files, social artwork, the signed public
-feed, its signature and public key, Netlify configuration, and the Cloudflare
-worker target. Run `npm ci`, then `npm run build` or
-`npm run build:netlify`.
-
-No secret is required for an ordinary build. Without the private signing key,
-the build verifies that the committed feed is authentic and matches the source
-content. Authorized publishers can set `FEED_SIGNING_PRIVATE_KEY` to regenerate
-the feed after editorial changes. The private key, original evidence, and
-unredacted media must never be committed.
-
-Runtime source discovery still depends on Google News India and the Press
-Information Bureau. The optional CJP timeline connects to X only after a
-visitor chooses to load it.
+No deployment or push is part of the local review workflow.

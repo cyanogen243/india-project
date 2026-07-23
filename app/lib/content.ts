@@ -1,11 +1,3 @@
-import updatesData from "@/content/updates.json";
-import demandsData from "@/content/demands.json";
-import timelineData from "@/content/timeline.json";
-import correctionsData from "@/content/corrections.json";
-import readingRoomData from "@/content/reading-room.json";
-import mediaData from "@/content/media.json";
-import governmentResponsesData from "@/content/government-responses.json";
-
 export type Language = "en" | "hi";
 export type UpdateStatus =
   | "reported"
@@ -107,14 +99,35 @@ export type MediaRecord = {
   reviewers: string[];
 };
 
-export const updates = updatesData as Update[];
-export const demands = demandsData as Demand[];
-export const timeline = timelineData as TimelineItem[];
-export const corrections = correctionsData as Correction[];
-export const readingRoom = readingRoomData as ReadingItem[];
-export const media = mediaData as MediaRecord[];
-export const governmentResponses =
-  governmentResponsesData as GovernmentResponse[];
+export type Resource = {
+  id: string;
+  language: Language;
+  title: string;
+  owner: string;
+  category: string;
+  summary: string;
+  href: string;
+  reliability: "official" | "established" | "community";
+  reviewedAt: string;
+};
+
+export type LandingSection = {
+  id: string;
+  language: Language;
+  title: string;
+  body: string;
+};
+
+export type ContentBundle = {
+  updates: Update[];
+  demands: Demand[];
+  timeline: TimelineItem[];
+  corrections: Correction[];
+  readingRoom: ReadingItem[];
+  governmentResponses: GovernmentResponse[];
+  resources: Resource[];
+  landing: LandingSection[];
+};
 
 export function forLanguage<T extends { language: Language }>(
   records: T[],

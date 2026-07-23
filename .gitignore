@@ -16,7 +16,6 @@
 # next.js
 /.next/
 /.vinext/
-/.netlify/
 /.output/
 /out/
 
@@ -41,6 +40,7 @@ yarn-error.log*
 # typescript
 next-env.d.ts
 /dist/
+/data/
 /.wrangler/
 /outputs/
 /work/

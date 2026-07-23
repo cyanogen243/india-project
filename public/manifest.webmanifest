@@ -1,17 +1,17 @@
 {
-  "name": "The India Project — Student Public-Interest Record",
+  "name": "The India Project — Safe. Verified. People Powered.",
   "short_name": "India Project",
   "description": "Verified bilingual public information and offline safety resources.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f4f1e9",
-  "theme_color": "#132c2d",
+  "background_color": "#F6EFE2",
+  "theme_color": "#E21F26",
   "lang": "en-IN",
   "icons": [
     {
-      "src": "/brand-mark.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "/brand/compact-logo.png",
+      "sizes": "246x227",
+      "type": "image/png",
       "purpose": "any"
     },
     {

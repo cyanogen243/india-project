@@ -8,6 +8,8 @@ const kinds = [
   "safety",
   "legal",
   "reading-room",
+  "resources",
+  "volunteer",
   "corrections",
   "evidence",
   "text",
@@ -16,7 +18,7 @@ const kinds = [
   "editorial-standard",
 ] satisfies PageKind[];
 
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
 
 export function generateStaticParams() {
   return [

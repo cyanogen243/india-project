@@ -10,12 +10,12 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 const updates = JSON.parse(await readFile("content/updates.json", "utf8"));
 const privateDirectory = ".private";
 const privateKeyPath = `${privateDirectory}/feed-private.pem`;
-const feedPath = "public/feed/updates.json";
-const signaturePath = "public/feed/updates.sig";
-const publicKeyPath = "public/feed/public-key.txt";
+const feedPath = "content/feed/updates.json";
+const signaturePath = "content/feed/updates.sig";
+const publicKeyPath = "content/feed/public-key.txt";
 
 await mkdir(privateDirectory, { recursive: true });
-await mkdir("public/feed", { recursive: true });
+await mkdir("content/feed", { recursive: true });
 
 function stable(value) {
   if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`;

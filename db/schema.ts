@@ -1,0 +1,130 @@
+import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+
+export const users = sqliteTable(
+  "users",
+  {
+    id: text("id").primaryKey(),
+    email: text("email").notNull(),
+    displayName: text("display_name").notNull(),
+    role: text("role", { enum: ["super_admin", "admin"] }).notNull(),
+    passwordHash: text("password_hash").notNull(),
+    mustChangePassword: integer("must_change_password", { mode: "boolean" })
+      .notNull()
+      .default(true),
+    temporaryPasswordExpiresAt: text("temporary_password_expires_at"),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    createdBy: text("created_by"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    lastLoginAt: text("last_login_at"),
+  },
+  (table) => [uniqueIndex("users_email_unique").on(table.email)],
+);
+
+export const sessions = sqliteTable(
+  "sessions",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    csrfToken: text("csrf_token").notNull(),
+    expiresAt: text("expires_at").notNull(),
+    createdAt: text("created_at").notNull(),
+    lastSeenAt: text("last_seen_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("sessions_token_hash_unique").on(table.tokenHash),
+    index("sessions_user_idx").on(table.userId),
+  ],
+);
+
+export const volunteerSubmissions = sqliteTable(
+  "volunteer_submissions",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    email: text("email").notNull(),
+    skillsJson: text("skills_json").notNull(),
+    languagesJson: text("languages_json").notNull(),
+    availability: text("availability").notNull(),
+    note: text("note").notNull(),
+    language: text("language", { enum: ["en", "hi"] }).notNull(),
+    status: text("status", {
+      enum: ["new", "contacted", "accepted", "declined", "archived"],
+    })
+      .notNull()
+      .default("new"),
+    internalNotes: text("internal_notes").notNull().default(""),
+    consentedAt: text("consented_at").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    retentionEligibleAt: text("retention_eligible_at"),
+  },
+  (table) => [
+    index("volunteers_status_idx").on(table.status),
+    index("volunteers_created_idx").on(table.createdAt),
+  ],
+);
+
+export const contentEntries = sqliteTable(
+  "content_entries",
+  {
+    id: text("id").primaryKey(),
+    collection: text("collection").notNull(),
+    recordId: text("record_id").notNull(),
+    language: text("language", { enum: ["en", "hi"] }).notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    draftJson: text("draft_json").notNull(),
+    publishedJson: text("published_json"),
+    version: integer("version").notNull().default(1),
+    publishedAt: text("published_at"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    updatedBy: text("updated_by"),
+    publishedBy: text("published_by"),
+  },
+  (table) => [
+    uniqueIndex("content_collection_record_language_unique").on(
+      table.collection,
+      table.recordId,
+      table.language,
+    ),
+    index("content_collection_order_idx").on(table.collection, table.sortOrder),
+  ],
+);
+
+export const feedReleases = sqliteTable("feed_releases", {
+  id: text("id").primaryKey(),
+  payload: text("payload").notNull(),
+  signature: text("signature").notNull(),
+  publicKey: text("public_key").notNull(),
+  generatedAt: text("generated_at").notNull(),
+  createdBy: text("created_by"),
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+});
+
+export const auditEvents = sqliteTable(
+  "audit_events",
+  {
+    id: text("id").primaryKey(),
+    actorUserId: text("actor_user_id"),
+    action: text("action").notNull(),
+    entityType: text("entity_type").notNull(),
+    entityId: text("entity_id"),
+    detailsJson: text("details_json").notNull().default("{}"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [index("audit_created_idx").on(table.createdAt)],
+);
+
+export const rateLimits = sqliteTable(
+  "rate_limits",
+  {
+    keyHash: text("key_hash").primaryKey(),
+    action: text("action").notNull(),
+    count: integer("count").notNull().default(0),
+    windowStartedAt: text("window_started_at").notNull(),
+    expiresAt: text("expires_at").notNull(),
+  },
+  (table) => [index("rate_limits_expiry_idx").on(table.expiresAt)],
+);

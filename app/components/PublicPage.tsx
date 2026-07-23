@@ -1,20 +1,18 @@
 import {
-  corrections,
-  demands,
   forLanguage,
   formatDate,
-  governmentResponses,
-  media,
-  readingRoom,
-  timeline,
-  updates,
+  type ContentBundle,
   type Language,
+  type MediaRecord,
 } from "@/app/lib/content";
+import { loadPublishedContent } from "@/app/lib/database";
+import mediaData from "@/content/media.json";
 import { LiveUpdates } from "./LiveUpdates";
 import { FreshSourceScan } from "./FreshSourceScan";
 import { CjpXFeed } from "./CjpXFeed";
 import { ShareReceipt } from "./ShareReceipt";
 import { SiteShell } from "./SiteShell";
+import { VolunteerForm } from "./VolunteerForm";
 
 export type PageKind =
   | "home"
@@ -24,6 +22,8 @@ export type PageKind =
   | "safety"
   | "legal"
   | "reading-room"
+  | "resources"
+  | "volunteer"
   | "corrections"
   | "evidence"
   | "text"
@@ -41,6 +41,8 @@ const titles: Record<Language, Record<PageKind, string>> = {
     safety: "Safety information",
     legal: "Legal information",
     "reading-room": "Reading room",
+    resources: "Trusted resources",
+    volunteer: "Volunteer with The India Project",
     corrections: "Corrections and retractions",
     evidence: "Sensitive evidence intake",
     text: "Low-bandwidth summary",
@@ -57,6 +59,8 @@ const titles: Record<Language, Record<PageKind, string>> = {
     safety: "सुरक्षा सूचना",
     legal: "कानूनी सूचना",
     "reading-room": "पठन कक्ष",
+    resources: "विश्वसनीय संसाधन",
+    volunteer: "द इंडिया प्रोजेक्ट के साथ स्वयंसेवा",
     corrections: "सुधार और वापसी",
     evidence: "संवेदनशील साक्ष्य जमा करना",
     text: "कम-बैंडविड्थ सारांश",
@@ -66,6 +70,8 @@ const titles: Record<Language, Record<PageKind, string>> = {
     "editorial-standard": "संपादकीय और सत्यापन मानक",
   },
 };
+
+const media = mediaData as MediaRecord[];
 
 function PageHeader({
   language,
@@ -99,10 +105,11 @@ function StatusKey({ language }: { language: Language }) {
   );
 }
 
-function Home({ language }: { language: Language }) {
+function Home({ language, data }: { language: Language; data: ContentBundle }) {
   const hindi = language === "hi";
-  const records = forLanguage(updates, language);
-  const demandItems = forLanguage(demands, language);
+  const records = forLanguage(data.updates, language);
+  const demandItems = forLanguage(data.demands, language);
+  const landing = forLanguage(data.landing, language);
   return (
     <>
       <section className="hero">
@@ -123,6 +130,9 @@ function Home({ language }: { language: Language }) {
             <a className="button" href={hindi ? "/offline-pack/field-pack-hi.pdf" : "/offline-pack/field-pack-en.pdf"}>
               {hindi ? "ऑफलाइन फील्ड पैक" : "Offline field pack"}
             </a>
+            <a className="button" href={hindi ? "/hi/volunteer" : "/volunteer"}>
+              {hindi ? "स्वयंसेवा करें" : "Volunteer with us"}
+            </a>
           </div>
         </div>
         <aside className="status-panel" aria-label={hindi ? "सेवा स्थिति" : "Service status"}>
@@ -134,6 +144,22 @@ function Home({ language }: { language: Language }) {
             <div><dt>{hindi ? "सार्वजनिक अपलोड" : "Public uploads"}</dt><dd>{hindi ? "बंद" : "Disabled"}</dd></div>
           </dl>
         </aside>
+      </section>
+      <section className="why-section" aria-labelledby="why-heading">
+        <div className="why-heading">
+          <p className="eyebrow">{hindi ? "सरल भाषा में" : "In plain language"}</p>
+          <h2 id="why-heading">{hindi ? "क्या हो रहा है और यह क्यों मायने रखता है" : "What is happening, and why it matters"}</h2>
+          <p>{hindi ? "तथ्यों में शांति। उद्देश्य में साहस।" : "Calm in fact. Bold in purpose."}</p>
+        </div>
+        <div className="why-grid">
+          {landing.map((item, index) => (
+            <article key={item.id}>
+              <span>{String(index + 1).padStart(2, "0")}</span>
+              <h3>{item.title}</h3>
+              <p>{item.body}</p>
+            </article>
+          ))}
+        </div>
       </section>
       <section className="alert-band">
         <div>
@@ -170,25 +196,25 @@ function Home({ language }: { language: Language }) {
   );
 }
 
-function UpdatesPage({ language }: { language: Language }) {
+function UpdatesPage({ language, data }: { language: Language; data: ContentBundle }) {
   return (
     <>
       <PageHeader language={language} kind="updates" intro={language === "hi" ? "प्रकाशन, घटना और समाप्ति समय के साथ स्रोतयुक्त रिकॉर्ड। लाइव फ़ीड हर 30 सेकंड में नई प्रकाशित प्रति जाँचती है।" : "Sourced records with event, publication, and expiry times. The live feed checks for a newly published copy every 30 seconds."} />
       <FreshSourceScan language={language} />
       <CjpXFeed language={language} />
       <StatusKey language={language} />
-      <LiveUpdates language={language} initial={forLanguage(updates, language)} />
+      <LiveUpdates language={language} initial={forLanguage(data.updates, language)} />
     </>
   );
 }
 
-function DemandsPage({ language }: { language: Language }) {
+function DemandsPage({ language, data }: { language: Language; data: ContentBundle }) {
   const hindi = language === "hi";
   return (
     <>
       <PageHeader language={language} kind="demands" intro={hindi ? "केवल आयोजक-स्वीकृत माँगें और उनके स्रोत यहाँ प्रकाशित होते हैं।" : "Only organiser-approved demands and their sources are published here."} />
       <div className="stack">
-        {forLanguage(demands, language).map((demand) => (
+        {forLanguage(data.demands, language).map((demand) => (
           <article className="record" key={demand.id}>
             <p className="eyebrow">{hindi ? "माँग" : "Demand"} · {demand.version}</p>
             <h2>{demand.text}</h2>
@@ -199,7 +225,7 @@ function DemandsPage({ language }: { language: Language }) {
       <section className="responses-section">
         <p className="eyebrow">{hindi ? "सरकारी प्रतिक्रियाएँ" : "Government responses"}</p>
         <div className="stack">
-          {forLanguage(governmentResponses, language).map((response) => (
+          {forLanguage(data.governmentResponses, language).map((response) => (
             <article className="record response-record" key={response.id}>
               <span className="badge badge-corroborating">{hindi ? "प्रतिक्रिया" : "response"}</span>
               <h2>{response.title}</h2>
@@ -217,13 +243,13 @@ function DemandsPage({ language }: { language: Language }) {
   );
 }
 
-function TimelinePage({ language }: { language: Language }) {
+function TimelinePage({ language, data }: { language: Language; data: ContentBundle }) {
   const hindi = language === "hi";
   return (
     <>
       <PageHeader language={language} kind="timeline" intro={hindi ? "राय या अनुमान के बिना सत्यापित घटनाओं का क्रम।" : "A factual sequence of verified events, without opinion or speculation."} />
       <ol className="timeline">
-        {forLanguage(timeline, language).map((item) => (
+        {forLanguage(data.timeline, language).map((item) => (
           <li key={item.id}><time>{formatDate(item.date, language)}</time><div><span className={`badge badge-${item.status}`}>{item.status}</span><h2>{item.title}</h2><p>{item.summary}</p><small>{item.sources[0].label} [{item.sources[0].tier}]</small></div></li>
         ))}
       </ol>
@@ -274,17 +300,17 @@ function LegalPage({ language }: { language: Language }) {
   );
 }
 
-function ReadingRoomPage({ language }: { language: Language }) {
+function ReadingRoomPage({ language, data }: { language: Language; data: ContentBundle }) {
   return (
     <>
       <PageHeader language={language} kind="reading-room" intro={language === "hi" ? "मूल दस्तावेज़, आधिकारिक नोटिस और स्पष्ट रूप से लेबल की गई टिप्पणी।" : "Original documents, official notices, and clearly labelled commentary."} />
-      <div className="stack">{forLanguage(readingRoom, language).map((item) => <a className="document-row" href={item.href} key={item.id}><span className="document-kind">{item.kind}</span><span><strong>{item.title}</strong><small>{item.summary}</small></span><b>→</b></a>)}</div>
+      <div className="stack">{forLanguage(data.readingRoom, language).map((item) => <a className="document-row" href={item.href} key={item.id}><span className="document-kind">{item.kind}</span><span><strong>{item.title}</strong><small>{item.summary}</small></span><b>→</b></a>)}</div>
     </>
   );
 }
 
-function CorrectionsPage({ language }: { language: Language }) {
-  const records = forLanguage(corrections, language);
+function CorrectionsPage({ language, data }: { language: Language; data: ContentBundle }) {
+  const records = forLanguage(data.corrections, language);
   const hindi = language === "hi";
   return (
     <>
@@ -342,9 +368,9 @@ function HallOfShamePage({ language }: { language: Language }) {
   );
 }
 
-function ReceiptsPage({ language }: { language: Language }) {
+function ReceiptsPage({ language, data }: { language: Language; data: ContentBundle }) {
   const hindi = language === "hi";
-  const records = forLanguage(updates, language).slice(0, 3);
+  const records = forLanguage(data.updates, language).slice(0, 3);
   return (
     <>
       <PageHeader
@@ -408,42 +434,96 @@ function EditorialStandardPage({ language }: { language: Language }) {
   );
 }
 
-function TextPage({ language }: { language: Language }) {
+function TextPage({ language, data }: { language: Language; data: ContentBundle }) {
   const hindi = language === "hi";
   return (
     <div className="text-only">
       <h1>{titles[language].text}</h1>
       <p>{hindi ? "स्थिति: परीक्षा जवाबदेही आंदोलन जारी; केवल सत्यापित व्यापक-क्षेत्र अपडेट।" : "Status: exam-accountability movement continues; verified broad-zone updates only."}</p>
       <h2>{hindi ? "नवीनतम अपडेट" : "Latest updates"}</h2>
-      {forLanguage(updates, language).map((item) => <article key={item.id}><h3>{item.title}</h3><p>{item.summary}</p><p>{item.status} · {item.city} · {formatDate(item.publishedAt, language)}</p></article>)}
+      {forLanguage(data.updates, language).map((item) => <article key={item.id}><h3>{item.title}</h3><p>{item.summary}</p><p>{item.status} · {item.city} · {formatDate(item.publishedAt, language)}</p></article>)}
       <p><a href={hindi ? "/hi" : "/"}>{hindi ? "पूर्ण साइट पर लौटें" : "Return to full site"}</a></p>
     </div>
   );
 }
 
-export function PublicPage({
+function ResourcesPage({ language, data }: { language: Language; data: ContentBundle }) {
+  const hindi = language === "hi";
+  return (
+    <>
+      <PageHeader
+        language={language}
+        kind="resources"
+        intro={hindi ? "कानूनी सहायता, डिजिटल सुरक्षा और प्रदर्शन की तैयारी के लिए समीक्षा किए गए बाहरी संसाधन। हर लिंक का मालिक और समीक्षा तिथि स्पष्ट है।" : "Reviewed external resources for legal aid, digital security, and protest preparation. Every link shows its owner and review date."}
+      />
+      <div className="resource-grid">
+        {forLanguage(data.resources, language).map((resource) => (
+          <article className="resource-card" key={resource.id}>
+            <div><span className={`trust-label trust-${resource.reliability}`}>{resource.reliability}</span><span>{resource.category}</span></div>
+            <h2>{resource.title}</h2>
+            <p>{resource.summary}</p>
+            <dl>
+              <div><dt>{hindi ? "मालिक" : "Owner"}</dt><dd>{resource.owner}</dd></div>
+              <div><dt>{hindi ? "समीक्षा" : "Reviewed"}</dt><dd>{formatDate(resource.reviewedAt, language)}</dd></div>
+            </dl>
+            <a className="button" href={resource.href} target="_blank" rel="noopener noreferrer">{hindi ? "बाहरी संसाधन खोलें" : "Open external resource"} ↗</a>
+          </article>
+        ))}
+      </div>
+      <div className="notice">{hindi ? "समुदाय-निर्मित संसाधन उपयोगी हो सकते हैं, लेकिन वे द इंडिया प्रोजेक्ट की आधिकारिक या स्वतंत्र रूप से सत्यापित सेवाएँ नहीं हैं।" : "Community-built resources may be useful, but they are not official or independently verified services of The India Project."}</div>
+    </>
+  );
+}
+
+function VolunteerPage({ language }: { language: Language }) {
+  const hindi = language === "hi";
+  return (
+    <>
+      <PageHeader language={language} kind="volunteer" intro={hindi ? "अनुवाद, स्रोत समीक्षा, सुगम्यता, संपादकीय और तकनीकी काम में मदद करें। हम केवल आवश्यक जानकारी माँगते हैं।" : "Help with translation, source review, accessibility, editorial, or technical work. We ask only for the information we need."} />
+      <div className="volunteer-layout">
+        <aside>
+          <p className="eyebrow">{hindi ? "सुरक्षित भागीदारी" : "Safer participation"}</p>
+          <h2>{hindi ? "लोगों की शक्ति, सावधानी के साथ" : "People power, handled with care"}</h2>
+          <p>{hindi ? "आपको विरोध स्थल पर होने या संवेदनशील सामग्री साझा करने की जरूरत नहीं है। दूर से किया गया सावधान काम भी महत्वपूर्ण है।" : "You do not need to be at a protest site or share sensitive material. Careful remote work is valuable too."}</p>
+          <ul>
+            <li>{hindi ? "कोई फोन नंबर नहीं" : "No phone number requested"}</li>
+            <li>{hindi ? "कोई सटीक स्थान नहीं" : "No precise location requested"}</li>
+            <li>{hindi ? "कोई फ़ाइल अपलोड नहीं" : "No file uploads"}</li>
+            <li>{hindi ? "केवल अधिकृत एडमिन की पहुँच" : "Authorised admin access only"}</li>
+          </ul>
+        </aside>
+        <VolunteerForm language={language} />
+      </div>
+    </>
+  );
+}
+
+export async function PublicPage({
   language,
   kind,
 }: {
   language: Language;
   kind: PageKind;
 }) {
-  if (kind === "text") return <TextPage language={language} />;
+  const data = await loadPublishedContent();
+  if (kind === "text") return <TextPage language={language} data={data} />;
 
   let content: React.ReactNode;
   switch (kind) {
-    case "home": content = <Home language={language} />; break;
-    case "updates": content = <UpdatesPage language={language} />; break;
-    case "demands": content = <DemandsPage language={language} />; break;
-    case "timeline": content = <TimelinePage language={language} />; break;
+    case "home": content = <Home language={language} data={data} />; break;
+    case "updates": content = <UpdatesPage language={language} data={data} />; break;
+    case "demands": content = <DemandsPage language={language} data={data} />; break;
+    case "timeline": content = <TimelinePage language={language} data={data} />; break;
     case "safety": content = <SafetyPage language={language} />; break;
     case "legal": content = <LegalPage language={language} />; break;
-    case "reading-room": content = <ReadingRoomPage language={language} />; break;
-    case "corrections": content = <CorrectionsPage language={language} />; break;
+    case "reading-room": content = <ReadingRoomPage language={language} data={data} />; break;
+    case "resources": content = <ResourcesPage language={language} data={data} />; break;
+    case "volunteer": content = <VolunteerPage language={language} />; break;
+    case "corrections": content = <CorrectionsPage language={language} data={data} />; break;
     case "evidence": content = <EvidencePage language={language} />; break;
     case "offline": content = <OfflinePage language={language} />; break;
     case "hall-of-shame": content = <HallOfShamePage language={language} />; break;
-    case "receipts": content = <ReceiptsPage language={language} />; break;
+    case "receipts": content = <ReceiptsPage language={language} data={data} />; break;
     case "editorial-standard": content = <EditorialStandardPage language={language} />; break;
   }
   return <SiteShell language={language}><div className="page-shell">{content}</div></SiteShell>;
