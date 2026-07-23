@@ -103,9 +103,6 @@ function Home({ language }: { language: Language }) {
   const hindi = language === "hi";
   const records = forLanguage(updates, language);
   const demandItems = forLanguage(demands, language);
-  const volunteerUrl =
-    process.env.NEXT_PUBLIC_VOLUNTEER_URL ??
-    "https://github.com/jobelshaji95/the-india-project/issues/new?template=volunteer.yml&title=Volunteer%3A+";
   return (
     <>
       <section className="hero">
@@ -167,34 +164,6 @@ function Home({ language }: { language: Language }) {
           <a href={hindi ? "/hi/receipts" : "/receipts"}><span>{hindi ? "सत्यापित रसीदें साझा करें" : "Share verified receipts"}</span><strong>→</strong></a>
           <a href={hindi ? "/hi/evidence" : "/evidence"}><span>{hindi ? "साक्ष्य नीति" : "Evidence policy"}</span><strong>→</strong></a>
           <a href={hindi ? "/hi/corrections" : "/corrections"}><span>{hindi ? "सुधार लॉग" : "Correction log"}</span><strong>→</strong></a>
-        </div>
-      </section>
-      <section className="volunteer-callout" id="volunteer" aria-labelledby="volunteer-title">
-        <div className="volunteer-copy">
-          <p className="eyebrow">{hindi ? "स्वयंसेवकों की आवश्यकता" : "Call for volunteers"}</p>
-          <h2 id="volunteer-title">
-            {hindi ? "सत्यापन डेस्क में अपना समय दें" : "Give time to the verification desk"}
-          </h2>
-          <p>
-            {hindi
-              ? "हमें अनुवाद, सार्वजनिक स्रोतों की समीक्षा और पहुँच-सुधार में मदद चाहिए। काम दूरस्थ है; हम फील्ड रिपोर्टिंग, सटीक स्थान या संवेदनशील फ़ाइलें नहीं माँगते।"
-              : "We need help with translation, public-source review, and accessibility. The work is remote; we do not ask volunteers for field reporting, precise locations, or sensitive files."}
-          </p>
-        </div>
-        <div className="volunteer-actions">
-          <ul aria-label={hindi ? "स्वयंसेवी भूमिकाएँ" : "Volunteer roles"}>
-            <li>{hindi ? "हिंदी और अंग्रेज़ी अनुवाद" : "Hindi and English translation"}</li>
-            <li>{hindi ? "स्रोत और समय-जाँच" : "Source and timestamp checks"}</li>
-            <li>{hindi ? "पहुँच और कम-बैंडविड्थ समीक्षा" : "Accessibility and low-bandwidth review"}</li>
-          </ul>
-          <a className="button button-primary" href={volunteerUrl} rel="noreferrer">
-            {hindi ? "रुचि दर्ज करें" : "Register your interest"}
-          </a>
-          <small>
-            {hindi
-              ? "यह एक सार्वजनिक GitHub पेज खोलता है। संवेदनशील या पहचान योग्य जानकारी साझा न करें।"
-              : "Opens a public GitHub page. Do not include sensitive or identifying information."}
-          </small>
         </div>
       </section>
     </>

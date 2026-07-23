@@ -115,9 +115,7 @@ directory and framework preset defaults, and deploy. The live
 `/api/source-scan` route runs as a Vercel Function.
 
 No environment variable is required. Set `NEXT_PUBLIC_SITE_URL` to the final
-custom domain for canonical social metadata. Set
-`NEXT_PUBLIC_VOLUNTEER_URL` only when replacing the public GitHub volunteer
-template with an approved private intake page.
+custom domain for canonical social metadata.
 
 Vercel and the other deployment targets remain separate:
 

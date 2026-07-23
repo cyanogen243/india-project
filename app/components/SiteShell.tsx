@@ -11,7 +11,6 @@ const nav = {
     ["Legal", "/legal"],
     ["Share receipts", "/receipts"],
     ["Reading room", "/reading-room"],
-    ["Volunteer", "/#volunteer"],
   ],
   hi: [
     ["अपडेट", "/hi/updates"],
@@ -21,7 +20,6 @@ const nav = {
     ["कानूनी", "/hi/legal"],
     ["रसीद साझा करें", "/hi/receipts"],
     ["पठन कक्ष", "/hi/reading-room"],
-    ["स्वयंसेवक", "/hi#volunteer"],
   ],
 } satisfies Record<Language, string[][]>;
 
@@ -96,9 +94,6 @@ export function SiteShell({
           </a>
           <a href={hindi ? "/hi/editorial-standard" : "/editorial-standard"}>
             {hindi ? "संपादकीय मानक" : "Editorial standard"}
-          </a>
-          <a href={hindi ? "/hi#volunteer" : "/#volunteer"}>
-            {hindi ? "स्वयंसेवक बनें" : "Volunteer"}
           </a>
         </div>
         <p className="footer-note">

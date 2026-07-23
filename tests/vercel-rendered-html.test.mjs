@@ -69,8 +69,7 @@ test("renders the Vercel-ready public-interest homepage", async () => {
   );
   assert.doesNotMatch(html, /class="brand-mark"[^>]*>S</);
   assert.match(html, /exam-accountability movement continues/i);
-  assert.match(html, /Give time to the verification desk/);
-  assert.match(html, /Register your interest/);
+  assert.doesNotMatch(html, /Call for volunteers|Register your interest|github\.com/i);
   assert.doesNotMatch(html, /Hall of Shame|\/hall-of-shame/i);
 
   const manifestResponse = await fetch(`${baseUrl}/manifest.webmanifest`);
@@ -82,7 +81,7 @@ test("renders the Vercel-ready public-interest homepage", async () => {
   );
 });
 
-test("renders Hindi volunteer copy and keeps hidden routes unavailable", async () => {
+test("renders Hindi and keeps hidden routes unavailable", async () => {
   const [hindi, hiddenMediaArchive] = await Promise.all([
     render("/hi"),
     render("/hall-of-shame"),
@@ -90,5 +89,5 @@ test("renders Hindi volunteer copy and keeps hidden routes unavailable", async (
 
   assert.equal(hindi.status, 200);
   assert.equal(hiddenMediaArchive.status, 404);
-  assert.match(await hindi.text(), /सत्यापन डेस्क में अपना समय दें/);
+  assert.doesNotMatch(await hindi.text(), /स्वयंसेवकों की आवश्यकता|github\.com/i);
 });

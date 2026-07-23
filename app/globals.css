@@ -709,59 +709,6 @@ dd {
   text-decoration: none;
 }
 
-.volunteer-callout {
-  scroll-margin-top: 1.5rem;
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
-  gap: 3rem;
-  margin-top: 4.5rem;
-  border-block: 3px solid var(--ink);
-  padding-block: 2.5rem;
-}
-
-.volunteer-copy h2 {
-  max-width: 18ch;
-  font-size: clamp(2rem, 5vw, 3.5rem);
-  line-height: 1.05;
-}
-
-.volunteer-copy > p:last-child {
-  max-width: 650px;
-  margin-top: 1rem;
-  color: var(--ink-soft);
-}
-
-.volunteer-actions {
-  border-left: 1px solid var(--line);
-  padding-left: 2rem;
-}
-
-.volunteer-actions ul {
-  margin-bottom: 1.4rem;
-}
-
-.volunteer-actions li {
-  position: relative;
-  padding: 0.55rem 0 0.55rem 1.25rem;
-  border-bottom: 1px solid var(--line);
-  font-weight: 700;
-}
-
-.volunteer-actions li::before {
-  position: absolute;
-  left: 0;
-  content: "•";
-  color: var(--red);
-}
-
-.volunteer-actions small {
-  display: block;
-  max-width: 38ch;
-  margin-top: 0.75rem;
-  color: var(--ink-soft);
-  font-size: 0.72rem;
-}
-
 .page-header {
   padding: 2rem 0 3rem;
   border-bottom: 3px solid var(--ink);
@@ -1297,17 +1244,9 @@ footer p {
 
   .hero,
   .two-column,
-  .volunteer-callout,
   footer {
     grid-template-columns: 1fr;
     gap: 2rem;
-  }
-
-  .volunteer-actions {
-    border-top: 1px solid var(--line);
-    border-left: 0;
-    padding-top: 1.5rem;
-    padding-left: 0;
   }
 
   h1 {
