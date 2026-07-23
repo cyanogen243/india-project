@@ -28,6 +28,7 @@ test("renders the verified public-interest homepage", async () => {
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
   const csp = response.headers.get("content-security-policy") ?? "";
   assert.match(csp, /default-src 'self'/);
+  assert.match(csp, /script-src[^;]*'unsafe-inline'/);
   assert.match(csp, /script-src[^;]*https:\/\/platform\.twitter\.com/);
   assert.match(csp, /frame-src[^;]*https:\/\/platform\.twitter\.com/);
 
@@ -54,7 +55,10 @@ test("renders Hindi, receipts, and the no-upload evidence page", async () => {
   assert.equal(evidence.status, 200);
 
   assert.match(await hindi.text(), /परीक्षा जवाबदेही आंदोलन जारी/);
-  assert.match(await receipts.text(), /Share the receipts/);
+  const receiptsHtml = await receipts.text();
+  assert.match(receiptsHtml, /Share the receipts/);
+  assert.match(receiptsHtml, /Share verified receipt/);
+  assert.match(receiptsHtml, /Copy receipt/);
 
   const evidenceHtml = await evidence.text();
   assert.match(evidenceHtml, /No files can be uploaded here/);

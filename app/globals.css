@@ -607,9 +607,19 @@ dd {
   text-decoration: underline;
 }
 
-.share-button {
-  min-height: 40px;
+.share-actions {
   margin-top: 1rem;
+}
+
+.share-action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.share-button,
+.copy-receipt-button {
+  min-height: 40px;
   border: 1px solid var(--ink);
   background: transparent;
   color: var(--ink);
@@ -620,9 +630,36 @@ dd {
   cursor: pointer;
 }
 
-.share-button:hover {
+.share-button:hover,
+.copy-receipt-button:hover {
   background: var(--ink);
   color: var(--paper);
+}
+
+.copy-receipt-button {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.share-feedback {
+  min-height: 1.25rem;
+  margin: 0.45rem 0 0;
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.manual-receipt {
+  width: 100%;
+  min-height: 10rem;
+  margin-top: 0.35rem;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+  padding: 0.65rem;
+  font: inherit;
+  font-size: 0.72rem;
+  line-height: 1.45;
 }
 
 .two-column {
