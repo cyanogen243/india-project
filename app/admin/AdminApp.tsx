@@ -60,6 +60,10 @@ type AdminData = {
   }[];
 };
 
+function accountDisplayName(user: Pick<User, "displayName" | "role">) {
+  return user.role === "super_admin" ? "Super admin" : user.displayName;
+}
+
 const statuses = ["new", "contacted", "accepted", "declined", "archived"];
 
 const emptyTemplates: Record<string, Record<string, unknown>> = {
@@ -291,7 +295,11 @@ export function AdminApp() {
         <div>
           <p className="eyebrow">The India Project</p>
           <h1>Editorial workspace</h1>
-          <p>{data.user.displayName} · {data.user.role.replace("_", " ")}</p>
+          <p>
+            {data.user.role === "super_admin"
+              ? "Super admin"
+              : `${data.user.displayName} · Admin`}
+          </p>
         </div>
         <div className="admin-header-actions">
           <Link className="button" href="/">View public site</Link>
@@ -679,7 +687,11 @@ function UserWorkspace({
           <tbody>
             {users.map((user) => (
               <tr key={user.id}>
-                <td><strong>{user.displayName}</strong><br /><small>{user.email}</small></td>
+                <td>
+                  <strong>{accountDisplayName(user)}</strong>
+                  <br />
+                  <small>{user.email}</small>
+                </td>
                 <td>{user.role.replace("_", " ")}</td>
                 <td>{user.active ? "active" : "disabled"}{user.mustChangePassword ? " · password change required" : ""}</td>
                 <td>{user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString() : "Never"}</td>

@@ -161,6 +161,19 @@ test("keeps admin, API, and live page visits out of stale service-worker caches"
   assert.ok(bypassIndex >= 0 && bypassIndex < cacheMatchIndex);
 });
 
+test("masks personal display names for super-admin accounts", async () => {
+  const adminSource = await readFile(
+    path.join(process.cwd(), "app", "admin", "AdminApp.tsx"),
+    "utf8",
+  );
+  assert.match(
+    adminSource,
+    /user\.role === "super_admin" \? "Super admin" : user\.displayName/,
+  );
+  assert.doesNotMatch(adminSource, /<strong>\{user\.displayName\}<\/strong>/);
+  assert.doesNotMatch(adminSource, /<p>\{data\.user\.displayName\}/);
+});
+
 test("counts repeat visitors once per network per day without raw identifiers", async () => {
   const headers = { "x-forwarded-for": "203.0.113.42" };
   const firstResponse = await fetch(`${baseUrl}/api/visitor-count`, {
