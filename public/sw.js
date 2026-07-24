@@ -1,4 +1,4 @@
-const CACHE = "the-india-project-v4";
+const CACHE = "the-india-project-v5";
 const ESSENTIAL = [
   "/",
   "/brand/compact-logo.png",
@@ -51,6 +51,18 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
 
+  // Authentication and API responses must always come from the network.
+  // Caching /api/admin would replay the signed-out response after login, while
+  // caching an authenticated response could expose private workspace data.
+  if (
+    url.pathname.startsWith("/api/") ||
+    url.pathname === "/admin" ||
+    url.pathname.startsWith("/admin/") ||
+    url.searchParams.has("_rsc")
+  ) {
+    return;
+  }
+
   if (url.pathname === "/feed/updates.json") {
     event.respondWith(
       fetch(event.request)
@@ -60,6 +72,25 @@ self.addEventListener("fetch", (event) => {
           return response;
         })
         .catch(() => caches.match(event.request)),
+    );
+    return;
+  }
+
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE).then((cache) => cache.put(event.request, copy));
+          }
+          return response;
+        })
+        .catch(
+          async () =>
+            (await caches.match(event.request)) ||
+            (await caches.match("/offline.html")),
+        ),
     );
     return;
   }

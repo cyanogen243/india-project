@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { spawn, spawnSync } from "node:child_process";
 import { generateKeyPairSync, verify } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { readFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import net from "node:net";
@@ -147,6 +147,18 @@ test("renders Hindi and keeps removed or hidden routes unavailable", async () =>
     resourcesHtml,
     /https:\/\/www\.indiatechcollective\.org\//i,
   );
+});
+
+test("keeps admin, API, and live page visits out of stale service-worker caches", async () => {
+  const worker = await readFile(path.join(process.cwd(), "public", "sw.js"), "utf8");
+  assert.match(worker, /url\.pathname\.startsWith\("\/api\/"\)/);
+  assert.match(worker, /url\.pathname === "\/admin"/);
+  assert.match(worker, /url\.searchParams\.has\("_rsc"\)/);
+  assert.match(worker, /event\.request\.mode === "navigate"/);
+
+  const bypassIndex = worker.indexOf('url.pathname.startsWith("/api/")');
+  const cacheMatchIndex = worker.indexOf("caches.match(event.request)");
+  assert.ok(bypassIndex >= 0 && bypassIndex < cacheMatchIndex);
 });
 
 test("counts repeat visitors once per network per day without raw identifiers", async () => {
