@@ -6,10 +6,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import net from "node:net";
+import { createClient } from "@libsql/client";
 
 let server;
 let baseUrl;
 let testDbDir;
+let testDbPath;
 const superAdminEmail = "owner@example.test";
 const superAdminPassword = "LocalReviewPassword!2026";
 
@@ -38,11 +40,11 @@ async function waitForServer(url) {
 
 before(async () => {
   testDbDir = await mkdtemp(path.join(tmpdir(), "tip-test-"));
-  const dbPath = path.join(testDbDir, "app.db").replaceAll("\\", "/");
+  testDbPath = path.join(testDbDir, "app.db").replaceAll("\\", "/");
   const { privateKey } = generateKeyPairSync("ed25519");
   const testEnv = {
     ...process.env,
-    LIBSQL_URL: `file:${dbPath}`,
+    LIBSQL_URL: `file:${testDbPath}`,
     ADMIN_BOOTSTRAP_EMAIL: superAdminEmail,
     ADMIN_BOOTSTRAP_NAME: "Local Owner",
     ADMIN_BOOTSTRAP_PASSWORD: superAdminPassword,
@@ -101,7 +103,8 @@ test("renders the Vercel-ready public-interest homepage", async () => {
   assert.match(html, /exam-accountability movement continues/i);
   assert.match(html, /Volunteer with us/i);
   assert.match(html, /What is happening, and why it matters/i);
-  assert.match(html, /href="\/resources">Resources</i);
+  assert.match(html, /href="\/resources">Partners &amp; resources</i);
+  assert.match(html, /People-powered reach/i);
   assert.doesNotMatch(html, /Hall of Shame|\/hall-of-shame/i);
 
   const manifestResponse = await fetch(`${baseUrl}/manifest.webmanifest`);
@@ -113,15 +116,80 @@ test("renders the Vercel-ready public-interest homepage", async () => {
   );
 });
 
-test("renders Hindi and keeps hidden routes unavailable", async () => {
-  const [hindi, hiddenMediaArchive] = await Promise.all([
+test("renders Hindi and keeps removed or hidden routes unavailable", async () => {
+  const [hindi, volunteer, removedLegal, hiddenMediaArchive] = await Promise.all([
     render("/hi"),
+    render("/volunteer"),
+    render("/legal"),
     render("/hall-of-shame"),
   ]);
 
   assert.equal(hindi.status, 200);
+  assert.equal(volunteer.status, 200);
+  assert.equal(removedLegal.status, 404);
   assert.equal(hiddenMediaArchive.status, 404);
   assert.match(await hindi.text(), /स्वयंसेवा करें/i);
+  const volunteerHtml = await volunteer.text();
+  assert.match(volunteerHtml, /Join the tech team/i);
+  assert.match(volunteerHtml, /WhatsApp/i);
+  assert.match(volunteerHtml, /Telegram/i);
+  assert.match(volunteerHtml, /Discord/i);
+
+  const resourcesHtml = await (await render("/resources")).text();
+  assert.match(resourcesHtml, /Partner links/i);
+  assert.match(resourcesHtml, /CJP Delhi Protest Hub/i);
+  assert.match(resourcesHtml, /India Tech Collective/i);
+  assert.match(
+    resourcesHtml,
+    /https:\/\/cockroachjantaparty\.raizian\.in\/delhi-protest/i,
+  );
+  assert.match(
+    resourcesHtml,
+    /https:\/\/www\.indiatechcollective\.org\//i,
+  );
+});
+
+test("counts repeat visitors once per network per day without raw identifiers", async () => {
+  const headers = { "x-forwarded-for": "203.0.113.42" };
+  const firstResponse = await fetch(`${baseUrl}/api/visitor-count`, {
+    method: "POST",
+    headers,
+  });
+  assert.equal(firstResponse.status, 200);
+  const first = await firstResponse.json();
+  assert.equal(first.total, 1);
+
+  const repeatResponse = await fetch(`${baseUrl}/api/visitor-count`, {
+    method: "POST",
+    headers,
+  });
+  assert.equal(repeatResponse.status, 200);
+  assert.deepEqual(await repeatResponse.json(), first);
+
+  const secondVisitorResponse = await fetch(`${baseUrl}/api/visitor-count`, {
+    method: "POST",
+    headers: { "x-forwarded-for": "198.51.100.24" },
+  });
+  assert.equal(secondVisitorResponse.status, 200);
+  assert.deepEqual(await secondVisitorResponse.json(), { total: 2 });
+
+  const testDatabase = createClient({ url: `file:${testDbPath}` });
+  const totals = await testDatabase.execute(
+    "SELECT total FROM visitor_totals WHERE id = 'site'",
+  );
+  const identifiers = await testDatabase.execute(
+    "SELECT identifier_hash FROM visitor_daily_identifiers ORDER BY identifier_hash",
+  );
+  testDatabase.close();
+  assert.equal(Number(totals.rows[0].total), 2);
+  assert.equal(identifiers.rows.length, 2);
+  assert.ok(
+    identifiers.rows.every(
+      (row) =>
+        !String(row.identifier_hash).includes("203.0.113.42") &&
+        !String(row.identifier_hash).includes("198.51.100.24"),
+    ),
+  );
 });
 
 test("accepts volunteers and enforces the audited admin workflow", async () => {
@@ -131,7 +199,9 @@ test("accepts volunteers and enforces the audited admin workflow", async () => {
     body: JSON.stringify({
       name: "Review Volunteer",
       email: "volunteer@example.test",
-      skills: ["source-review", "translation"],
+      contactPlatform: "telegram",
+      contactHandle: "@reviewvolunteer",
+      skills: ["source-review", "tech-team"],
       languages: ["English", "Hindi"],
       availability: "Three hours each week",
       note: "I can review sources and help prepare clear bilingual summaries.",
@@ -142,6 +212,21 @@ test("accepts volunteers and enforces the audited admin workflow", async () => {
     }),
   });
   assert.equal(volunteerResponse.status, 201);
+
+  const testDatabase = createClient({ url: `file:${testDbPath}` });
+  const persistedVolunteer = await testDatabase.execute({
+    sql: `SELECT email, contact_platform, contact_handle, skills_json
+          FROM volunteer_submissions WHERE email = ?`,
+    args: ["volunteer@example.test"],
+  });
+  testDatabase.close();
+  assert.equal(persistedVolunteer.rows.length, 1);
+  assert.equal(persistedVolunteer.rows[0].contact_platform, "telegram");
+  assert.equal(persistedVolunteer.rows[0].contact_handle, "@reviewvolunteer");
+  assert.deepEqual(
+    JSON.parse(String(persistedVolunteer.rows[0].skills_json)),
+    ["source-review", "tech-team"],
+  );
 
   const anonymous = await fetch(`${baseUrl}/api/admin`);
   assert.deepEqual(await anonymous.json(), { authenticated: false });
@@ -180,6 +265,8 @@ test("accepts volunteers and enforces the audited admin workflow", async () => {
   const adminData = await initial.json();
   assert.equal(adminData.user.role, "super_admin");
   assert.equal(adminData.volunteers[0].email, "volunteer@example.test");
+  assert.equal(adminData.volunteers[0].contactPlatform, "telegram");
+  assert.equal(adminData.volunteers[0].contactHandle, "@reviewvolunteer");
 
   const volunteerUpdate = await adminRequest({
     action: "volunteer_update",

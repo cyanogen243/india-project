@@ -43,7 +43,8 @@ export async function GET(request: NextRequest) {
     if (!user) return NextResponse.json({ authenticated: false });
     const db = await ensureDatabase();
     const [volunteers, content, users, audits] = await Promise.all([
-      db.execute(`SELECT id, name, email, skills_json, languages_json, availability,
+      db.execute(`SELECT id, name, email, contact_platform, contact_handle,
+                         skills_json, languages_json, availability,
                          note, language, status, internal_notes, consented_at,
                          created_at, updated_at, retention_eligible_at
                   FROM volunteer_submissions ORDER BY created_at DESC`),
@@ -67,6 +68,8 @@ export async function GET(request: NextRequest) {
         id: String(row.id),
         name: String(row.name),
         email: String(row.email),
+        contactPlatform: String(row.contact_platform),
+        contactHandle: String(row.contact_handle),
         skills: JSON.parse(String(row.skills_json)),
         languages: JSON.parse(String(row.languages_json)),
         availability: String(row.availability),

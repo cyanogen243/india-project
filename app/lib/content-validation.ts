@@ -108,7 +108,7 @@ const schemas: Record<string, z.ZodTypeAny> = {
     category: z.string().min(2),
     summary: z.string().min(4),
     href: z.string().url(),
-    reliability: z.enum(["official", "established", "community"]),
+    reliability: z.enum(["official", "established", "community", "partner"]),
     reviewedAt: z.string().date(),
   }),
   landing: z.object({

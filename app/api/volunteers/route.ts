@@ -8,7 +8,9 @@ export const dynamic = "force-dynamic";
 const volunteerSchema = z.object({
   name: z.string().trim().min(2).max(100),
   email: z.string().trim().email().max(240),
-  skills: z.array(z.enum(["translation", "source-review", "accessibility", "editorial", "technical"])).min(1).max(5),
+  contactPlatform: z.enum(["whatsapp", "telegram", "discord"]),
+  contactHandle: z.string().trim().min(2).max(100).regex(/^[^\r\n<>]+$/),
+  skills: z.array(z.enum(["translation", "source-review", "accessibility", "editorial", "technical", "tech-team"])).min(1).max(5),
   languages: z.array(z.string().trim().min(2).max(40)).min(1).max(8),
   availability: z.string().trim().min(2).max(160),
   note: z.string().trim().min(20).max(1500),
@@ -45,13 +47,16 @@ export async function POST(request: NextRequest) {
     const id = randomUUID();
     await db.execute({
       sql: `INSERT INTO volunteer_submissions
-        (id, name, email, skills_json, languages_json, availability, note,
+        (id, name, email, contact_platform, contact_handle,
+         skills_json, languages_json, availability, note,
          language, status, internal_notes, consented_at, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'new', '', ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', '', ?, ?, ?)`,
       args: [
         id,
         body.name,
         body.email.toLowerCase(),
+        body.contactPlatform,
+        body.contactHandle,
         JSON.stringify(body.skills),
         JSON.stringify(body.languages),
         body.availability,

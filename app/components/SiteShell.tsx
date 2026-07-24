@@ -1,6 +1,7 @@
 import type { Language } from "@/app/lib/content";
 import Link from "next/link";
 import { ServiceWorkerRegister } from "./ServiceWorkerRegister";
+import { VisitorCounter } from "./VisitorCounter";
 
 const nav = {
   en: [
@@ -8,9 +9,8 @@ const nav = {
     ["Demands", "/demands"],
     ["Timeline", "/timeline"],
     ["Safety", "/safety"],
-    ["Legal", "/legal"],
     ["Share receipts", "/receipts"],
-    ["Resources", "/resources"],
+    ["Partners & resources", "/resources"],
     ["Volunteer", "/volunteer"],
     ["Reading room", "/reading-room"],
   ],
@@ -19,9 +19,8 @@ const nav = {
     ["माँगें", "/hi/demands"],
     ["समयरेखा", "/hi/timeline"],
     ["सुरक्षा", "/hi/safety"],
-    ["कानूनी", "/hi/legal"],
     ["रसीद साझा करें", "/hi/receipts"],
-    ["संसाधन", "/hi/resources"],
+    ["साझेदार व संसाधन", "/hi/resources"],
     ["स्वयंसेवा", "/hi/volunteer"],
     ["पठन कक्ष", "/hi/reading-room"],
   ],
@@ -82,6 +81,7 @@ export function SiteShell({
       <main id="main">{children}</main>
       <footer>
         <div>
+          <span className="footer-mark" aria-hidden="true" />
           <p className="footer-brand">The India Project</p>
           <p>
             {hindi
@@ -100,10 +100,11 @@ export function SiteShell({
             {hindi ? "संपादकीय मानक" : "Editorial standard"}
           </a>
         </div>
+        <VisitorCounter language={language} />
         <p className="footer-note">
           {hindi
             ? "कोई विश्लेषिकी, कुकी, खाता या सार्वजनिक अपलोड नहीं।"
-            : "No analytics, precise location tracking, or public file uploads."}
+            : "No third-party analytics, cookies, precise location tracking, or public file uploads."}
         </p>
       </footer>
       <ServiceWorkerRegister />

@@ -29,6 +29,7 @@ export async function createInitialSuperAdmin(
   email: string,
   displayName: string,
   password: string,
+  options: { temporary?: boolean } = {},
 ) {
   const db = await ensureDatabase();
   const existing = await db.execute(
@@ -38,15 +39,30 @@ export async function createInitialSuperAdmin(
     throw new Error("A super-admin already exists");
   }
   const now = new Date().toISOString();
+  const temporaryPasswordExpiresAt = options.temporary
+    ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+    : null;
   const id = randomUUID();
   await db.execute({
     sql: `INSERT INTO users
       (id, email, display_name, role, password_hash, must_change_password,
-       active, created_at, updated_at)
-      VALUES (?, ?, ?, 'super_admin', ?, 0, 1, ?, ?)`,
-    args: [id, normalizeEmail(email), displayName.trim(), await hashPassword(password), now, now],
+       temporary_password_expires_at, active, created_at, updated_at)
+      VALUES (?, ?, ?, 'super_admin', ?, ?, ?, 1, ?, ?)`,
+    args: [
+      id,
+      normalizeEmail(email),
+      displayName.trim(),
+      await hashPassword(password),
+      options.temporary ? 1 : 0,
+      temporaryPasswordExpiresAt,
+      now,
+      now,
+    ],
   });
-  await writeAuditEvent(id, "bootstrap", "user", id, { role: "super_admin" });
+  await writeAuditEvent(id, "bootstrap", "user", id, {
+    role: "super_admin",
+    temporaryPassword: Boolean(options.temporary),
+  });
   return id;
 }
 

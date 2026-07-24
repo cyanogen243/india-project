@@ -107,7 +107,7 @@ export type Resource = {
   category: string;
   summary: string;
   href: string;
-  reliability: "official" | "established" | "community";
+  reliability: "official" | "established" | "community" | "partner";
   reviewedAt: string;
 };
 

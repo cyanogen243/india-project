@@ -6,7 +6,6 @@ const kinds = [
   "demands",
   "timeline",
   "safety",
-  "legal",
   "reading-room",
   "resources",
   "volunteer",

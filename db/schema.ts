@@ -44,6 +44,12 @@ export const volunteerSubmissions = sqliteTable(
     id: text("id").primaryKey(),
     name: text("name").notNull(),
     email: text("email").notNull(),
+    contactPlatform: text("contact_platform", {
+      enum: ["whatsapp", "telegram", "discord"],
+    })
+      .notNull()
+      .default("telegram"),
+    contactHandle: text("contact_handle").notNull().default(""),
     skillsJson: text("skills_json").notNull(),
     languagesJson: text("languages_json").notNull(),
     availability: text("availability").notNull(),
@@ -127,4 +133,20 @@ export const rateLimits = sqliteTable(
     expiresAt: text("expires_at").notNull(),
   },
   (table) => [index("rate_limits_expiry_idx").on(table.expiresAt)],
+);
+
+export const visitorTotals = sqliteTable("visitor_totals", {
+  id: text("id").primaryKey(),
+  total: integer("total").notNull().default(0),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const visitorDailyIdentifiers = sqliteTable(
+  "visitor_daily_identifiers",
+  {
+    identifierHash: text("identifier_hash").primaryKey(),
+    visitDate: text("visit_date").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [index("visitor_daily_date_idx").on(table.visitDate)],
 );

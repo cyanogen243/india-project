@@ -19,6 +19,8 @@ type Volunteer = {
   id: string;
   name: string;
   email: string;
+  contactPlatform: "whatsapp" | "telegram" | "discord";
+  contactHandle: string;
   skills: string[];
   languages: string[];
   availability: string;
@@ -568,7 +570,7 @@ function VolunteerWorkspace({
   const filtered = volunteers.filter(
     (item) =>
       (status === "all" || item.status === status) &&
-      `${item.name} ${item.email} ${item.skills.join(" ")}`
+      `${item.name} ${item.email} ${item.contactPlatform} ${item.contactHandle} ${item.skills.join(" ")}`
         .toLowerCase()
         .includes(query.toLowerCase()),
   );
@@ -625,6 +627,7 @@ function VolunteerCard({
       <div><span className={`badge badge-${status}`}>{status}</span><small>{new Date(volunteer.createdAt).toLocaleString()}</small></div>
       <h3>{volunteer.name}</h3>
       <a href={`mailto:${volunteer.email}`}>{volunteer.email}</a>
+      <p><strong>{volunteer.contactPlatform}:</strong> {volunteer.contactHandle || "Not provided"}</p>
       <p><strong>Skills:</strong> {volunteer.skills.join(", ")}</p>
       <p><strong>Languages:</strong> {volunteer.languages.join(", ")}</p>
       <p><strong>Availability:</strong> {volunteer.availability}</p>

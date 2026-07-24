@@ -29,11 +29,35 @@ Open `http://localhost:3000`. The public site is at `/`, volunteer intake is at
 default is `file:./data/the-india-project.db`; database files and secrets are
 ignored.
 
+Run `npm run db:check` to verify that the configured database can be migrated,
+seeded, and read. It prints only aggregate counts, never volunteer details,
+credentials, or network identifiers.
+
 The first `npm run admin:bootstrap` command prompts for a super-admin email,
 display name, and password. It refuses to create a second initial super-admin.
 The super-admin can create admins or additional super-admins in `/admin`.
 Generated one-time passwords expire after 24 hours and must be changed at first
 sign-in.
+
+For an unattended first production setup, set
+`ADMIN_BOOTSTRAP_TEMPORARY=true` together with the admin email and display name.
+The bootstrap command prints one generated 24-hour password and requires it to
+be replaced at first sign-in.
+
+### Test the admin locally
+
+1. Run `npm run admin:bootstrap` once and enter your own local email, display
+   name, and a strong password when prompted. Password input is hidden.
+2. Run `npm run dev`, then open `http://localhost:3000/admin`.
+3. Sign in with the bootstrap credentials.
+4. Submit a test record at `/volunteer`, return to `/admin`, and open the
+   **Volunteers** tab. The record should appear with its email, contact platform,
+   handle, skills, languages, availability, and note.
+5. Change its status or internal notes and save. The change is written to the
+   database and recorded in the audit log.
+
+Local bootstrap credentials and the SQLite database remain ignored by Git. Use
+separate production credentials and Turso/libSQL environment values on Vercel.
 
 ## Database and production configuration
 
@@ -50,6 +74,10 @@ RATE_LIMIT_SECRET=...
 FEED_SIGNING_PRIVATE_KEY=...
 NEXT_PUBLIC_SITE_URL=https://your-domain.example
 ```
+
+The native Vercel Turso integration can be used without renaming its injected
+variables. `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` are accepted as
+production fallbacks when the corresponding `LIBSQL_*` values are absent.
 
 Use a different high-entropy value for each secret. Rotate a session secret by
 replacing it and revoking sessions; rotate the rate-limit secret independently.
@@ -72,10 +100,12 @@ SameSite-strict cookies. Mutations require a session-bound CSRF token. Passwords
 use salted PBKDF2-HMAC-SHA256 with 600,000 iterations, failed logins perform the
 same derivation work for known and unknown accounts, and attempts are throttled.
 
-Volunteer intake collects only a name or alias, email, skills, languages,
-availability, a short note, and consent. It deliberately omits phone numbers,
-IDs, files, and precise locations. Declined and archived records become cleanup
-eligible after 180 days and can be explicitly deleted by an admin.
+Volunteer intake collects only a name or alias, email, contact platform and
+handle, skills, languages, availability, a short note, and consent. Contact
+platforms are limited to WhatsApp, Telegram, and Discord; the form asks for a
+handle rather than a phone number. It deliberately omits IDs, files, and precise
+locations. Declined and archived records become cleanup eligible after 180 days
+and can be explicitly deleted by an admin.
 
 Editorial content is saved as drafts and published per collection. Existing
 source tiers, bilingual parity, timestamps, reviewer requirements, unsafe HTML,
@@ -109,6 +139,11 @@ The supplied source guide is committed at
 `docs/brand/TIP Brand Guidelines.pdf`. Approved logos are in `public/brand/`.
 Anton and Inter are bundled through the open-source Fontsource packages, so no
 runtime font request is made to Google.
+
+The designer-supplied master logo, texture, contact sheet, and layered icon
+source are preserved under `docs/brand/source/`. Optimized web derivatives live
+under `public/brand/`; the texture and illustrations are used only as framing
+and low-opacity accents so public information remains easy to read.
 
 Regenerate app icons from the approved primary mark with:
 

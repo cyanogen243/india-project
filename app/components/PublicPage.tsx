@@ -20,7 +20,6 @@ export type PageKind =
   | "demands"
   | "timeline"
   | "safety"
-  | "legal"
   | "reading-room"
   | "resources"
   | "volunteer"
@@ -39,9 +38,8 @@ const titles: Record<Language, Record<PageKind, string>> = {
     demands: "Demands and responses",
     timeline: "Movement timeline",
     safety: "Safety information",
-    legal: "Legal information",
     "reading-room": "Reading room",
-    resources: "Trusted resources",
+    resources: "Partners and trusted resources",
     volunteer: "Volunteer with The India Project",
     corrections: "Corrections and retractions",
     evidence: "Sensitive evidence intake",
@@ -57,9 +55,8 @@ const titles: Record<Language, Record<PageKind, string>> = {
     demands: "माँगें और प्रतिक्रियाएँ",
     timeline: "आंदोलन समयरेखा",
     safety: "सुरक्षा सूचना",
-    legal: "कानूनी सूचना",
     "reading-room": "पठन कक्ष",
-    resources: "विश्वसनीय संसाधन",
+    resources: "साझेदार और विश्वसनीय संसाधन",
     volunteer: "द इंडिया प्रोजेक्ट के साथ स्वयंसेवा",
     corrections: "सुधार और वापसी",
     evidence: "संवेदनशील साक्ष्य जमा करना",
@@ -186,7 +183,7 @@ function Home({ language, data }: { language: Language; data: ContentBundle }) {
         </div>
         <div className="quick-links">
           <p className="eyebrow">{hindi ? "त्वरित पहुँच" : "Quick access"}</p>
-          <a href={hindi ? "/hi/legal" : "/legal"}><span>{hindi ? "कानूनी तैयारी" : "Legal preparation"}</span><strong>→</strong></a>
+          <a href={hindi ? "/hi/resources" : "/resources"}><span>{hindi ? "विश्वसनीय संसाधन" : "Trusted resources"}</span><strong>→</strong></a>
           <a href={hindi ? "/hi/receipts" : "/receipts"}><span>{hindi ? "सत्यापित रसीदें साझा करें" : "Share verified receipts"}</span><strong>→</strong></a>
           <a href={hindi ? "/hi/evidence" : "/evidence"}><span>{hindi ? "साक्ष्य नीति" : "Evidence policy"}</span><strong>→</strong></a>
           <a href={hindi ? "/hi/corrections" : "/corrections"}><span>{hindi ? "सुधार लॉग" : "Correction log"}</span><strong>→</strong></a>
@@ -277,25 +274,6 @@ function SafetyPage({ language }: { language: Language }) {
       <PageHeader language={language} kind="safety" intro={hindi ? "सामान्य तैयारी सूचना; चिकित्सा या कानूनी सलाह नहीं। अंतिम संपादकीय समीक्षा: 23 जुलाई 2026। पुनः समीक्षा: 23 अगस्त 2026।" : "General preparation information, not medical or legal advice. Last editorial review: 23 July 2026. Review again by: 23 August 2026."} />
       <div className="guide-grid">{items.map(([title, body], i) => <article className="guide" key={title}><span>{String(i + 1).padStart(2, "0")}</span><h2>{title}</h2><p>{body}</p></article>)}</div>
       <div className="notice">{hindi ? "तत्काल खतरे में स्थानीय आपातकालीन सेवाओं से संपर्क करें। इस साइट पर किसी व्यक्ति का सटीक स्थान न भेजें।" : "In immediate danger, contact local emergency services. Do not send anyone’s precise location to this site."}</div>
-    </>
-  );
-}
-
-function LegalPage({ language }: { language: Language }) {
-  const hindi = language === "hi";
-  return (
-    <>
-      <PageHeader language={language} kind="legal" intro={hindi ? "शहर-विशिष्ट कानूनी सहायता को प्रकाशन से पहले स्थानीय वकील द्वारा सत्यापित किया जाना चाहिए। यह नमूना कानूनी सलाह नहीं है।" : "City-specific legal support must be verified by a local lawyer before publication. This demonstration is not legal advice."} />
-      <div className="record">
-        <p className="eyebrow">{hindi ? "प्रकाशन जाँच-सूची" : "Publication checklist"}</p>
-        <h2>{hindi ? "किसी कानूनी संसाधन को जोड़ने से पहले" : "Before adding a legal resource"}</h2>
-        <ul className="check-list">
-          <li>{hindi ? "वकील या आधिकारिक संस्था का नाम और अधिकार क्षेत्र सत्यापित करें।" : "Verify the lawyer or official body and its jurisdiction."}</li>
-          <li>{hindi ? "स्रोत, समीक्षा तिथि और समाप्ति तिथि दर्ज करें।" : "Record the source, review date, and expiry date."}</li>
-          <li>{hindi ? "केवल सार्वजनिक और स्वीकृत संपर्क विवरण प्रकाशित करें।" : "Publish only public, approved contact details."}</li>
-          <li>{hindi ? "पुरानी या विवादित सलाह को तुरंत चिह्नित करें।" : "Flag outdated or disputed guidance immediately."}</li>
-        </ul>
-      </div>
     </>
   );
 }
@@ -449,27 +427,49 @@ function TextPage({ language, data }: { language: Language; data: ContentBundle 
 
 function ResourcesPage({ language, data }: { language: Language; data: ContentBundle }) {
   const hindi = language === "hi";
+  const resources = forLanguage(data.resources, language);
+  const partners = resources.filter((resource) => resource.reliability === "partner");
+  const reviewedResources = resources.filter((resource) => resource.reliability !== "partner");
+  const cards = (records: typeof resources) => records.map((resource) => (
+    <article className="resource-card" key={resource.id}>
+      <div><span className={`trust-label trust-${resource.reliability}`}>{resource.reliability}</span><span>{resource.category}</span></div>
+      <h2>{resource.title}</h2>
+      <p>{resource.summary}</p>
+      <dl>
+        <div><dt>{hindi ? "मालिक" : "Owner"}</dt><dd>{resource.owner}</dd></div>
+        <div><dt>{hindi ? "समीक्षा" : "Reviewed"}</dt><dd>{formatDate(resource.reviewedAt, language)}</dd></div>
+      </dl>
+      <a className="button" href={resource.href} target="_blank" rel="noopener noreferrer">{hindi ? "बाहरी लिंक खोलें" : "Open external link"} ↗</a>
+    </article>
+  ));
   return (
     <>
       <PageHeader
         language={language}
         kind="resources"
-        intro={hindi ? "कानूनी सहायता, डिजिटल सुरक्षा और प्रदर्शन की तैयारी के लिए समीक्षा किए गए बाहरी संसाधन। हर लिंक का मालिक और समीक्षा तिथि स्पष्ट है।" : "Reviewed external resources for legal aid, digital security, and protest preparation. Every link shows its owner and review date."}
+        intro={hindi ? "आंदोलन के साझेदार लिंक और कानूनी सहायता, डिजिटल सुरक्षा व प्रदर्शन की तैयारी के लिए समीक्षा किए गए बाहरी संसाधन। प्रथम-पक्ष दावे स्वतंत्र पुष्टि नहीं हैं।" : "Movement partner links plus reviewed external resources for legal aid, digital security, and protest preparation. First-party claims are not independent verification."}
       />
+      <section className="partner-directory" aria-labelledby="partner-links-heading">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">{hindi ? "प्रथम-पक्ष स्रोत" : "First-party sources"}</p>
+            <h2 id="partner-links-heading">{hindi ? "साझेदार लिंक" : "Partner links"}</h2>
+          </div>
+          <p>{hindi ? "साझेदार की अपनी वेबसाइट और अभियान सामग्री।" : "Partner-owned sites and campaign material."}</p>
+        </div>
+        <div className="resource-grid partner-grid">{cards(partners)}</div>
+      </section>
+      <section aria-labelledby="trusted-resources-heading">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">{hindi ? "समीक्षित निर्देशिका" : "Reviewed directory"}</p>
+            <h2 id="trusted-resources-heading">{hindi ? "विश्वसनीय संसाधन" : "Trusted resources"}</h2>
+          </div>
+        </div>
       <div className="resource-grid">
-        {forLanguage(data.resources, language).map((resource) => (
-          <article className="resource-card" key={resource.id}>
-            <div><span className={`trust-label trust-${resource.reliability}`}>{resource.reliability}</span><span>{resource.category}</span></div>
-            <h2>{resource.title}</h2>
-            <p>{resource.summary}</p>
-            <dl>
-              <div><dt>{hindi ? "मालिक" : "Owner"}</dt><dd>{resource.owner}</dd></div>
-              <div><dt>{hindi ? "समीक्षा" : "Reviewed"}</dt><dd>{formatDate(resource.reviewedAt, language)}</dd></div>
-            </dl>
-            <a className="button" href={resource.href} target="_blank" rel="noopener noreferrer">{hindi ? "बाहरी संसाधन खोलें" : "Open external resource"} ↗</a>
-          </article>
-        ))}
+        {cards(reviewedResources)}
       </div>
+      </section>
       <div className="notice">{hindi ? "समुदाय-निर्मित संसाधन उपयोगी हो सकते हैं, लेकिन वे द इंडिया प्रोजेक्ट की आधिकारिक या स्वतंत्र रूप से सत्यापित सेवाएँ नहीं हैं।" : "Community-built resources may be useful, but they are not official or independently verified services of The India Project."}</div>
     </>
   );
@@ -515,7 +515,6 @@ export async function PublicPage({
     case "demands": content = <DemandsPage language={language} data={data} />; break;
     case "timeline": content = <TimelinePage language={language} data={data} />; break;
     case "safety": content = <SafetyPage language={language} />; break;
-    case "legal": content = <LegalPage language={language} />; break;
     case "reading-room": content = <ReadingRoomPage language={language} data={data} />; break;
     case "resources": content = <ResourcesPage language={language} data={data} />; break;
     case "volunteer": content = <VolunteerPage language={language} />; break;

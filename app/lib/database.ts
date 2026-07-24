@@ -31,6 +31,7 @@ export const migrationStatements = [
   "CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions(user_id)",
   `CREATE TABLE IF NOT EXISTS volunteer_submissions (
     id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, email TEXT NOT NULL,
+    contact_platform TEXT NOT NULL DEFAULT 'telegram', contact_handle TEXT NOT NULL DEFAULT '',
     skills_json TEXT NOT NULL, languages_json TEXT NOT NULL, availability TEXT NOT NULL,
     note TEXT NOT NULL, language TEXT NOT NULL CHECK (language IN ('en', 'hi')),
     status TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new', 'contacted', 'accepted', 'declined', 'archived')),
@@ -65,6 +66,15 @@ export const migrationStatements = [
     window_started_at TEXT NOT NULL, expires_at TEXT NOT NULL
   )`,
   "CREATE INDEX IF NOT EXISTS rate_limits_expiry_idx ON rate_limits(expires_at)",
+  `CREATE TABLE IF NOT EXISTS visitor_totals (
+    id TEXT PRIMARY KEY NOT NULL, total INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS visitor_daily_identifiers (
+    identifier_hash TEXT PRIMARY KEY NOT NULL, visit_date TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )`,
+  "CREATE INDEX IF NOT EXISTS visitor_daily_date_idx ON visitor_daily_identifiers(visit_date)",
 ];
 
 let client: Client | undefined;
@@ -73,8 +83,13 @@ let ready: Promise<Client> | undefined;
 export function getDatabaseClient() {
   if (!client) {
     client = createClient({
-      url: process.env.LIBSQL_URL ?? "file:./data/the-india-project.db",
-      authToken: process.env.LIBSQL_AUTH_TOKEN,
+      url:
+        process.env.LIBSQL_URL ??
+        process.env.TURSO_DATABASE_URL ??
+        "file:./data/the-india-project.db",
+      authToken:
+        process.env.LIBSQL_AUTH_TOKEN ??
+        process.env.TURSO_AUTH_TOKEN,
     });
   }
   return client;
@@ -87,6 +102,7 @@ export async function ensureDatabase() {
       for (const sql of migrationStatements) {
         await db.execute(sql);
       }
+      await ensureVolunteerContactColumns(db);
       await seedContent(db);
       return db;
     })().catch((error) => {
@@ -97,10 +113,22 @@ export async function ensureDatabase() {
   return ready;
 }
 
-async function seedContent(db: Client) {
-  const count = await db.execute("SELECT COUNT(*) AS count FROM content_entries");
-  if (Number(count.rows[0]?.count ?? 0) > 0) return;
+async function ensureVolunteerContactColumns(db: Client) {
+  const columns = await db.execute("PRAGMA table_info(volunteer_submissions)");
+  const names = new Set(columns.rows.map((row) => String(row.name)));
+  if (!names.has("contact_platform")) {
+    await db.execute(
+      "ALTER TABLE volunteer_submissions ADD COLUMN contact_platform TEXT NOT NULL DEFAULT 'telegram'",
+    );
+  }
+  if (!names.has("contact_handle")) {
+    await db.execute(
+      "ALTER TABLE volunteer_submissions ADD COLUMN contact_handle TEXT NOT NULL DEFAULT ''",
+    );
+  }
+}
 
+async function seedContent(db: Client) {
   const now = new Date().toISOString();
   const statements = Object.entries(seededCollections).flatMap(
     ([collection, records]) =>
@@ -245,4 +273,14 @@ export async function consumeRateLimit(
 
 export function hashToken(value: string) {
   return createHash("sha256").update(value).digest("hex");
+}
+
+export function hashNetworkIdentifier(purpose: string, identifier: string) {
+  const secret =
+    process.env.RATE_LIMIT_SECRET ??
+    process.env.SESSION_SECRET ??
+    "local-development";
+  return createHmac("sha256", secret)
+    .update(`${purpose}:${identifier}`)
+    .digest("hex");
 }

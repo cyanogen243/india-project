@@ -1,7 +1,10 @@
 import { mkdir } from "node:fs/promises";
 import { stdin, stdout } from "node:process";
 import { createInterface } from "node:readline/promises";
-import { createInitialSuperAdmin } from "../app/lib/auth";
+import {
+  createInitialSuperAdmin,
+  generateTemporaryPassword,
+} from "../app/lib/auth";
 
 async function readHidden(label: string) {
   if (!stdin.isTTY || typeof stdin.setRawMode !== "function") {
@@ -56,13 +59,26 @@ if (!email || !displayName) {
   }
 }
 
+const useTemporaryPassword =
+  process.env.ADMIN_BOOTSTRAP_TEMPORARY === "true";
+const generatedTemporaryPassword =
+  useTemporaryPassword && !process.env.ADMIN_BOOTSTRAP_PASSWORD
+    ? generateTemporaryPassword()
+    : undefined;
 const password =
   process.env.ADMIN_BOOTSTRAP_PASSWORD ??
+  generatedTemporaryPassword ??
   (await readHidden("Password (12-128 characters): "));
 const confirmation =
   process.env.ADMIN_BOOTSTRAP_PASSWORD ??
+  generatedTemporaryPassword ??
   (await readHidden("Confirm password: "));
 
 if (password !== confirmation) throw new Error("Passwords do not match");
-await createInitialSuperAdmin(email, displayName, password);
+await createInitialSuperAdmin(email, displayName, password, {
+  temporary: useTemporaryPassword,
+});
 console.log(`Super-admin created for ${email.trim().toLowerCase()}.`);
+if (generatedTemporaryPassword) {
+  console.log(`One-time password (expires in 24 hours): ${generatedTemporaryPassword}`);
+}

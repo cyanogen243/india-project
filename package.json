@@ -17,6 +17,7 @@
     "validate:content": "node scripts/validate-content.mjs",
     "check:security": "node scripts/check-security.mjs",
     "db:setup": "tsx scripts/db-setup.ts",
+    "db:check": "tsx scripts/check-database.ts",
     "db:generate": "drizzle-kit generate",
     "admin:bootstrap": "tsx scripts/bootstrap-admin.ts",
     "typecheck": "tsc --noEmit",
