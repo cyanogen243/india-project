@@ -218,6 +218,32 @@ test("counts repeat visitors once per network per day without raw identifiers", 
 });
 
 test("accepts volunteers and enforces the audited admin workflow", async () => {
+  const invalidVolunteerResponse = await fetch(`${baseUrl}/api/volunteers`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-forwarded-for": "203.0.113.19",
+    },
+    body: JSON.stringify({
+      name: "Test",
+      email: "test@example.com",
+      contactPlatform: "discord",
+      contactHandle: "sad",
+      skills: ["translation", "tech-team"],
+      languages: ["English"],
+      availability: "S",
+      note: "I would like to support the volunteer team remotely.",
+      language: "en",
+      consent: true,
+      website: "",
+      startedAt: Date.now() - 5_000,
+    }),
+  });
+  assert.equal(invalidVolunteerResponse.status, 400);
+  const invalidVolunteer = await invalidVolunteerResponse.json();
+  assert.equal(invalidVolunteer.field, "availability");
+  assert.match(invalidVolunteer.error, /Availability must be between 2 and 160/);
+
   const volunteerResponse = await fetch(`${baseUrl}/api/volunteers`, {
     method: "POST",
     headers: { "content-type": "application/json" },

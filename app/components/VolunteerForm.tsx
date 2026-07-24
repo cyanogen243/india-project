@@ -112,8 +112,8 @@ export function VolunteerForm({ language }: { language: Language }) {
         </div>
       </fieldset>
       <div className="form-grid">
-        <label>{hindi ? "भाषाएँ, कॉमा से अलग करें" : "Languages, separated by commas"}<input name="languages" placeholder={hindi ? "हिंदी, अंग्रेज़ी" : "English, Hindi"} required /></label>
-        <label>{hindi ? "उपलब्धता" : "Availability"}<input name="availability" placeholder={hindi ? "जैसे, सप्ताह में 3 घंटे" : "For example, 3 hours a week"} required /></label>
+        <label>{hindi ? "भाषाएँ, कॉमा से अलग करें" : "Languages, separated by commas"}<input name="languages" minLength={2} maxLength={320} placeholder={hindi ? "हिंदी, अंग्रेज़ी" : "English, Hindi"} required /></label>
+        <label>{hindi ? "उपलब्धता" : "Availability"}<input name="availability" minLength={2} maxLength={160} placeholder={hindi ? "जैसे, सप्ताह में 3 घंटे" : "For example, 3 hours a week"} required /></label>
       </div>
       <label>{hindi ? "अनुभव और प्रेरणा" : "Experience and motivation"}<textarea name="note" minLength={20} maxLength={1500} rows={6} placeholder={hindi ? "संक्षेप में बताएँ कि आप क्या योगदान देना चाहते हैं। संवेदनशील जानकारी न दें।" : "Briefly tell us what you would like to contribute. Do not include sensitive information."} required /></label>
       <label className="honeypot" aria-hidden="true">Website<input name="website" tabIndex={-1} autoComplete="off" /></label>

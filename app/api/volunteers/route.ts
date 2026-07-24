@@ -20,6 +20,28 @@ const volunteerSchema = z.object({
   startedAt: z.number().int().positive(),
 });
 
+function validationResponse(error: z.ZodError) {
+  const field = String(error.issues[0]?.path[0] ?? "");
+  const messages: Record<string, string> = {
+    name: "Name or alias must be between 2 and 100 characters.",
+    email: "Enter a valid email address.",
+    contactPlatform: "Choose WhatsApp, Telegram, or Discord.",
+    contactHandle: "Handle or username must be between 2 and 100 characters.",
+    skills: "Select at least one way you can help.",
+    languages: "Enter at least one language, using 2 to 40 characters for each.",
+    availability: "Availability must be between 2 and 160 characters.",
+    note: "Experience and motivation must be between 20 and 1,500 characters.",
+    consent: "Consent is required before submitting.",
+  };
+  return NextResponse.json(
+    {
+      error: messages[field] ?? "Please check every required field.",
+      ...(field in messages ? { field } : {}),
+    },
+    { status: 400 },
+  );
+}
+
 function remoteIdentifier(request: NextRequest) {
   return (
     request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
@@ -72,12 +94,11 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json({ ok: true }, { status: 201 });
   } catch (error) {
+    if (error instanceof z.ZodError) return validationResponse(error);
     const message =
-      error instanceof z.ZodError
-        ? "Please check every required field."
-        : error instanceof Error
-          ? error.message
-          : "Unable to accept the submission.";
+      error instanceof Error
+        ? error.message
+        : "Unable to accept the submission.";
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }
