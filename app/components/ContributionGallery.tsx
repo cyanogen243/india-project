@@ -10,6 +10,22 @@ import type { PublicContribution } from "@/app/lib/database";
 // hand off to their read page. Mirrors POEM_TILE_LIMIT server-side.
 const POEM_TILE_LIMIT = 600;
 
+// Essay tiles open with the first words of the piece, per the approved mockup.
+// Paragraph breaks collapse to an em dash so a salutation reads inline
+// ("DEAR COMRADES — Our movement is passing…"); the CSS line clamp trims the
+// rest, so this only bounds how much text the clamp works with.
+const ESSAY_TEASER_LIMIT = 240;
+
+function essayTeaser(body: string) {
+  return body
+    .slice(0, ESSAY_TEASER_LIMIT * 2)
+    .split(/\n\s*\n/)
+    .map((paragraph) => paragraph.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .join(" — ")
+    .slice(0, ESSAY_TEASER_LIMIT);
+}
+
 // Writing tiles are coloured from the palette rather than at random, so a poem
 // keeps the same tile every visit.
 const TILE_COLOURS = ["#e21f26", "#0d47a1", "#3b1361", "#176845", "#8a5b00"];
@@ -174,6 +190,7 @@ export function ContributionGallery({
                   <div className="gallery-essay">
                     <h3>{item.title}</h3>
                     {item.subtitle && <p className="tile-sub">{item.subtitle}</p>}
+                    <p className="tile-teaser">{essayTeaser(item.body)}</p>
                     <Link className="tile-more" href={readHref(item.id)}>
                       {hindi ? "पूरा लेख पढ़ें →" : "Read the full essay →"}
                     </Link>
