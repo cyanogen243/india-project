@@ -101,8 +101,8 @@ export function ContributeForm({ language }: { language: Language }) {
   const kinds: [Kind, string, string][] = [
     ["poster", hindi ? "पोस्टर" : "Poster", hindi ? "छापने और थामने के लिए" : "Made to print and carry"],
     ["image", hindi ? "चित्र" : "Image", hindi ? "कलाकृति, चित्रण, फ़ोटो" : "Artwork, illustration, photo"],
-    ["poem", hindi ? "कविता" : "Poem", hindi ? "600 अक्षरों तक पूरी दिखती है" : "Shown in full · up to 600 characters"],
-    ["essay", hindi ? "लेख" : "Essay", hindi ? "दीवार पर शीर्षक और उपशीर्षक" : "Wall shows title + subtitle only"],
+    ["poem", hindi ? "कविता" : "Poem", hindi ? "पूरी दिखती है · लंबी कविता का अपना पन्ना" : "Shown in full · longer poems get their own page"],
+    ["essay", hindi ? "लेख" : "Essay", hindi ? "दीवार पर शुरुआती पंक्तियाँ · पूरा लेख अपने पन्ने पर" : "Opening lines on the wall · full essay on its own page"],
   ];
 
   return (
