@@ -118,9 +118,12 @@ export async function POST(request: NextRequest) {
       height = processed.height;
       byteSize = processed.printBytes.byteLength;
       fingerprint = contentFingerprint(processed.printBytes);
-    } else if (fields.body.length < 20) {
+    } else if (fields.body.length < 4) {
+      // Deliberately low. Devanagari says in a handful of characters what
+      // English needs a sentence for, so a longer floor would reject real
+      // slogans in Hindi while accepting padding in English.
       return NextResponse.json(
-        { error: "Writing must be at least 20 characters.", field: "body" },
+        { error: "Add a few more characters.", field: "body" },
         { status: 400 },
       );
     }

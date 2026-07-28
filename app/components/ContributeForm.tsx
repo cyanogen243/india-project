@@ -260,7 +260,7 @@ export function ContributeForm({ language }: { language: Language }) {
       ) : (
         <label>
           {hindi ? "आपका लेखन" : "Your writing"}
-          <textarea name="body" rows={12} minLength={20} maxLength={8000} required />
+          <textarea name="body" rows={12} minLength={4} maxLength={8000} required />
         </label>
       )}
 

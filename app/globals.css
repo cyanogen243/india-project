@@ -2657,3 +2657,20 @@ footer p {
   overflow: hidden;
   clip: rect(0 0 0 0);
 }
+
+.gallery-cta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  margin: 1.6rem 0 2rem;
+  padding: 1.1rem 1.2rem;
+  border: 1px solid var(--ink);
+  background: var(--paper-deep);
+}
+
+.gallery-cta p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+}

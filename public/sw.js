@@ -1,4 +1,4 @@
-const CACHE = "the-india-project-v5";
+const CACHE = "the-india-project-v6";
 const ESSENTIAL = [
   "/",
   "/brand/compact-logo.png",

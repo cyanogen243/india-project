@@ -499,11 +499,16 @@ async function KitPage({ language }: { language: Language }) {
             : "Posters, artwork and writing made for the movement. Free to download, print and share."
         }
       />
-      <p>
+      <div className="gallery-cta">
         <Link className="button button-primary" href={hindi ? "/hi/contribute" : "/contribute"}>
           {hindi ? "अपना काम साझा करें" : "Share your own work"}
         </Link>
-      </p>
+        <p>
+          {hindi
+            ? "कोई खाता नहीं, कोई ईमेल नहीं। हर चीज़ प्रकाशन से पहले जाँची जाती है।"
+            : "No account, no email. Everything is reviewed before it appears."}
+        </p>
+      </div>
       <ContributionGallery items={items} language={language} />
     </>
   );
