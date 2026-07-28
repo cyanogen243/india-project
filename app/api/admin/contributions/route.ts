@@ -17,6 +17,11 @@ export const runtime = "nodejs";
 
 const fieldsSchema = z.object({
   kind: z.enum(["poster", "image", "poem", "essay"]),
+  // Curation is the path for public-domain photographs and artwork: a
+  // moderator can read a licence page, which is why the public form offers
+  // public domain for writing only.
+  provenance: z.enum(["own", "public_domain"]).default("own"),
+  sourceUrl: z.string().trim().max(500),
   title: z.string().trim().min(2).max(120),
   subtitle: z.string().trim().max(120),
   credit: z.string().trim().max(80),
@@ -41,6 +46,8 @@ export async function POST(request: NextRequest) {
     const fields = fieldsSchema.parse({
       kind: form.get("kind"),
       title: form.get("title"),
+      provenance: form.get("provenance") ?? "own",
+      sourceUrl: form.get("sourceUrl") ?? "",
       subtitle: form.get("subtitle") ?? "",
       credit: form.get("credit") ?? "",
       creditAccount: form.get("creditAccount") ?? "",
@@ -97,14 +104,17 @@ export async function POST(request: NextRequest) {
     const unusableHash = createHash("sha256").update(`admin:${id}`).digest("hex");
     await db.execute({
       sql: `INSERT INTO contributions
-        (id, kind, title, subtitle, credit, credit_account, body, language,
+        (id, kind, title, subtitle, credit, credit_account, provenance, source_url,
+         body, language,
          storage_key, social_storage_key, mime_type, width, height, byte_size,
          status, internal_notes, content_fingerprint, recovery_code_hash,
          reviewed_by, reviewed_at, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Added by admin', ?, ?, ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Added by admin', ?, ?, ?, ?, ?, ?)`,
       args: [
         id, fields.kind, fields.title, fields.subtitle, fields.credit,
-        fields.creditAccount, isFileKind ? "" : fields.body, fields.language,
+        fields.creditAccount, fields.provenance,
+        fields.provenance === "public_domain" ? fields.sourceUrl : "",
+        isFileKind ? "" : fields.body, fields.language,
         storageKey, socialStorageKey, mimeType, width, height, byteSize,
         fields.status, fingerprint, unusableHash, user.id, now, now, now,
       ],

@@ -496,3 +496,138 @@ test("the sweep also clears expired rate-limit rows", async () => {
     "IP-derived rows do not outlive the window they enforce",
   );
 });
+
+// Curation is a separate write path from public submission, and it is how
+// public-domain photographs reach the wall.
+async function addDirectly(session, fields, file) {
+  const form = new FormData();
+  for (const [key, value] of Object.entries(fields)) form.set(key, value);
+  if (file) form.set("file", new Blob([file.bytes], { type: file.type }), file.name);
+  const response = await fetch(`${baseUrl}/api/admin/contributions`, {
+    method: "POST",
+    headers: { cookie: session.cookie, "x-tip-csrf": session.csrfToken },
+    body: form,
+  });
+  return { status: response.status, body: await response.json().catch(() => null) };
+}
+
+test("an admin can curate a public-domain photograph straight onto the wall", async () => {
+  const session = await adminSession();
+  const title = "Test Curated Photograph";
+  const bytes = await readFile("content/seed-art/image-march-to-dandi.jpg");
+  const added = await addDirectly(
+    session,
+    {
+      kind: "image",
+      title,
+      subtitle: "",
+      credit: "Unknown photographer",
+      creditAccount: "",
+      provenance: "public_domain",
+      sourceUrl: "https://commons.wikimedia.org/wiki/File:Example.jpg",
+      body: "",
+      language: "en",
+      status: "approved",
+    },
+    { bytes, type: "image/jpeg", name: "photo.jpg" },
+  );
+  assert.equal(added.status, 201, JSON.stringify(added.body));
+
+  const row = await rowByTitle(title);
+  assert.equal(row.provenance, "public_domain", "the curated record keeps its provenance");
+  assert.equal(
+    row.source_url,
+    "https://commons.wikimedia.org/wiki/File:Example.jpg",
+    "and the source a moderator verified",
+  );
+  assert.ok(row.storage_key, "the image was stored");
+
+  const wall = await (await fetch(`${baseUrl}/art`)).text();
+  assert.match(wall, new RegExp(title));
+
+  // Curated work carries no usable recovery code, so nobody can claim it.
+  assert.equal((await lookup("AAAAAAAA")).status, 404);
+});
+
+test("deleting a contribution removes its files and its row", async () => {
+  const session = await adminSession();
+  const title = "Test Delete Removes Files";
+  const bytes = await readFile("content/seed-art/poster-stripes.png");
+  await addDirectly(
+    session,
+    {
+      kind: "poster",
+      title,
+      subtitle: "",
+      credit: "Test",
+      creditAccount: "",
+      body: "",
+      language: "en",
+      status: "approved",
+    },
+    { bytes, type: "image/png", name: "p.png" },
+  );
+  const row = await rowByTitle(title);
+  assert.ok(row, "curated poster exists");
+  assert.equal((await fetch(`${baseUrl}/api/contributions/${row.id}/file`)).status, 200);
+
+  const deleted = await fetch(`${baseUrl}/api/admin`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      cookie: session.cookie,
+      "x-tip-csrf": session.csrfToken,
+    },
+    body: JSON.stringify({ action: "contribution_delete", id: String(row.id) }),
+  });
+  assert.equal(deleted.status, 200);
+  assert.equal(await rowByTitle(title), undefined, "the row is gone");
+  assert.equal(
+    (await fetch(`${baseUrl}/api/contributions/${row.id}/file`)).status,
+    404,
+    "and so is the file",
+  );
+});
+
+test("both languages serve every contribution surface", async () => {
+  const title = "Test Bilingual Poem";
+  const sent = await submit({
+    kind: "poem",
+    title,
+    body: "एक पंक्ति दीवार के लिए।\nऔर उसके नीचे दूसरी पंक्ति।",
+    credit: "परीक्षक",
+    language: "hi",
+  });
+  assert.equal(sent.status, 201);
+  const row = await rowByTitle(title);
+  const session = await adminSession();
+  await moderate(session, { id: String(row.id), status: "approved", internalNotes: "" });
+
+  for (const path of ["/art", "/hi/art", "/contribute", "/hi/contribute"]) {
+    const response = await fetch(`${baseUrl}${path}`);
+    assert.equal(response.status, 200, `${path} renders`);
+  }
+  const hindiWall = await (await fetch(`${baseUrl}/hi/art`)).text();
+  assert.match(hindiWall, /कला/, "the Hindi wall is actually in Hindi");
+  assert.match(hindiWall, new RegExp(title), "and carries the contribution");
+
+  // Devanagari survives the round trip unmangled.
+  const hindiRead = await (await fetch(`${baseUrl}/hi/art/${row.id}`)).text();
+  assert.match(hindiRead, /एक पंक्ति दीवार के लिए।/);
+});
+
+test("posters and images open in a lightbox rather than a page of their own", async () => {
+  const wall = await (await fetch(`${baseUrl}/art`)).text();
+  // The artwork is a real button, so it is reachable by keyboard, and the
+  // details that used to clutter each tile live behind it.
+  assert.match(wall, /<button[^>]*class="gallery-art"/, "artwork is a keyboard-reachable control");
+  assert.match(wall, /view larger/, "and says what it does");
+
+  const image = await db.execute(
+    "SELECT id FROM contributions WHERE kind IN ('poster','image') AND status = 'approved' LIMIT 1",
+  );
+  if (image.rows[0]) {
+    const page = await fetch(`${baseUrl}/art/${image.rows[0].id}`);
+    assert.equal(page.status, 404, "an image has no read page of its own");
+  }
+});
