@@ -2574,11 +2574,11 @@ footer p {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 1.2rem;
+  align-items: start;
 }
 
 .gallery-card {
   display: grid;
-  grid-template-rows: auto 1fr auto;
   border: 1px solid var(--ink);
   background: white;
   overflow: hidden;
@@ -2611,9 +2611,10 @@ footer p {
 
 .gallery-writing p {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: 1.05rem;
+  line-height: 1.5;
   white-space: pre-wrap;
-  opacity: 0.92;
+  opacity: 0.95;
 }
 
 .gallery-meta {

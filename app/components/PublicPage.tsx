@@ -27,7 +27,7 @@ export type PageKind =
   | "reading-room"
   | "resources"
   | "volunteer"
-  | "kit"
+  | "art"
   | "contribute"
   | "corrections"
   | "evidence"
@@ -47,7 +47,7 @@ const titles: Record<Language, Record<PageKind, string>> = {
     "reading-room": "Reading room",
     resources: "Partners and trusted resources",
     volunteer: "Volunteer with The India Project",
-    kit: "Poster and writing kit",
+    art: "Art and writing",
     contribute: "Share your poster or writing",
     corrections: "Corrections and retractions",
     evidence: "Sensitive evidence intake",
@@ -66,7 +66,7 @@ const titles: Record<Language, Record<PageKind, string>> = {
     "reading-room": "पठन कक्ष",
     resources: "साझेदार और विश्वसनीय संसाधन",
     volunteer: "द इंडिया प्रोजेक्ट के साथ स्वयंसेवा",
-    kit: "पोस्टर और लेखन किट",
+    art: "कला और लेखन",
     contribute: "अपना पोस्टर या लेखन साझा करें",
     corrections: "सुधार और वापसी",
     evidence: "संवेदनशील साक्ष्य जमा करना",
@@ -148,7 +148,7 @@ function Home({ language, data }: { language: Language; data: ContentBundle }) {
           <dl>
             <div><dt>{hindi ? "फ़ीड जाँच" : "Feed check"}</dt><dd>{hindi ? "हर 30 सेकंड" : "Every 30 seconds"}</dd></div>
             <div><dt>{hindi ? "स्थान नीति" : "Location policy"}</dt><dd>{hindi ? "केवल व्यापक क्षेत्र" : "Broad zones only"}</dd></div>
-            <div><dt>{hindi ? "सार्वजनिक अपलोड" : "Public uploads"}</dt><dd>{hindi ? "बंद" : "Disabled"}</dd></div>
+            <div><dt>{hindi ? "सार्वजनिक अपलोड" : "Public uploads"}</dt><dd>{hindi ? "समीक्षा के बाद ही" : "Moderated"}</dd></div>
           </dl>
         </aside>
       </section>
@@ -485,14 +485,14 @@ function ResourcesPage({ language, data }: { language: Language; data: ContentBu
   );
 }
 
-async function KitPage({ language }: { language: Language }) {
+async function ArtPage({ language }: { language: Language }) {
   const hindi = language === "hi";
   const items = await loadApprovedContributions();
   return (
     <>
       <PageHeader
         language={language}
-        kind="kit"
+        kind="art"
         intro={
           hindi
             ? "आंदोलन के लिए बनाए गए पोस्टर, कलाकृति और लेखन। मुफ़्त डाउनलोड करें, छापें और साझा करें।"
@@ -589,7 +589,7 @@ export async function PublicPage({
     case "reading-room": content = <ReadingRoomPage language={language} data={data} />; break;
     case "resources": content = <ResourcesPage language={language} data={data} />; break;
     case "volunteer": content = <VolunteerPage language={language} />; break;
-    case "kit": content = <KitPage language={language} />; break;
+    case "art": content = <ArtPage language={language} />; break;
     case "contribute": content = <ContributePage language={language} />; break;
     case "corrections": content = <CorrectionsPage language={language} data={data} />; break;
     case "evidence": content = <EvidencePage language={language} />; break;

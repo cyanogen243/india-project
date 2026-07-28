@@ -68,7 +68,7 @@ export function ContributionGallery({
             const pageUrl =
               typeof window === "undefined"
                 ? ""
-                : `${window.location.origin}${hindi ? "/hi/kit" : "/kit"}`;
+                : `${window.location.origin}${hindi ? "/hi/art" : "/art"}`;
             return (
               <article key={item.id} className="gallery-card">
                 {item.kind === "image" ? (

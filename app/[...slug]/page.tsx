@@ -9,7 +9,7 @@ const kinds = [
   "reading-room",
   "resources",
   "volunteer",
-  "kit",
+  "art",
   "contribute",
   "corrections",
   "evidence",
