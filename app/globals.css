@@ -1888,6 +1888,17 @@ footer p {
   gap: 1rem;
 }
 
+.volunteer-filter-summary {
+  margin-bottom: 1rem;
+}
+
+.volunteer-admin-empty {
+  grid-column: 1 / -1;
+  padding: 1rem;
+  border: 1px dashed var(--line);
+  color: var(--ink-soft);
+}
+
 .volunteer-admin-card {
   padding: 1rem;
   border: 1px solid var(--line);

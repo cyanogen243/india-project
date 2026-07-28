@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { filterVolunteers } from "./volunteer-filter";
 
 type User = {
   id: string;
@@ -575,12 +576,9 @@ function VolunteerWorkspace({
 }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
-  const filtered = volunteers.filter(
-    (item) =>
-      (status === "all" || item.status === status) &&
-      `${item.name} ${item.email} ${item.contactPlatform} ${item.contactHandle} ${item.skills.join(" ")}`
-        .toLowerCase()
-        .includes(query.toLowerCase()),
+  const filtered = useMemo(
+    () => filterVolunteers(volunteers, query, status),
+    [query, status, volunteers],
   );
   return (
     <section className="admin-panel">
@@ -590,11 +588,19 @@ function VolunteerWorkspace({
           <input aria-label="Search volunteers" placeholder="Search" value={query} onChange={(event) => setQuery(event.target.value)} />
           <select aria-label="Filter by status" value={status} onChange={(event) => setStatus(event.target.value)}>
             <option value="all">All statuses</option>
-            {statuses.map((item) => <option key={item}>{item}</option>)}
+            {statuses.map((item) => <option key={item} value={item}>{item}</option>)}
           </select>
         </div>
       </div>
+      <p className="admin-help volunteer-filter-summary" aria-live="polite">
+        Showing {filtered.length} of {volunteers.length} volunteer submissions.
+      </p>
       <div className="volunteer-admin-grid">
+        {filtered.length === 0 && (
+          <p className="volunteer-admin-empty">
+            No volunteer submissions match the current search and status filter.
+          </p>
+        )}
         {filtered.map((volunteer) => (
           <VolunteerCard
             key={`${volunteer.id}-${volunteer.status}-${volunteer.internalNotes}`}
