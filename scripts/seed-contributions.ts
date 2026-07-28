@@ -121,13 +121,16 @@ export async function seedContributions() {
       });
       await db.execute({
         sql: `UPDATE contributions
-              SET created_at = ?, provenance = ?, source_url = ?, placeholder = ?
+              SET created_at = ?, provenance = ?, placeholder = ?,
+                  source_url = CASE WHEN source_url = '' THEN ? ELSE source_url END
               WHERE id = ? AND seeded = 1`,
         args: [
           seed.sortAt,
           seed.publicDomain ? "public_domain" : "own",
-          seed.publicDomain?.sourceUrl ?? "",
           seed.placeholder ? 1 : 0,
+          // Only fills a blank: a source recovered and recorded by hand must
+          // survive the next db:setup, which npm run dev triggers every start.
+          seed.publicDomain?.sourceUrl ?? "",
           seed.id,
         ],
       });

@@ -964,3 +964,165 @@ test("a decoder failure is explained rather than dumped on the contributor", asy
   assert.doesNotMatch(message, /vips|libpng|buffer|Input image/i, "no decoder internals leak");
   assert.match(message, /could not be read|PNG or JPEG/i, "the contributor gets written copy");
 });
+
+test("moderator edits respect the same invariants as the public form", async () => {
+  const title = "Test Moderator Invariants";
+  const sent = await submit({ kind: "poem", title, body: "A poem a moderator will try to break." });
+  assert.equal(sent.status, 201);
+  const row = await rowByTitle(title);
+  const session = await adminSession();
+
+  const bothCredits = await moderate(session, {
+    id: String(row.id),
+    status: "pending",
+    internalNotes: "",
+    credit: "An Alias",
+    creditAccount: "@an-account",
+  });
+  assert.equal(bothCredits.status, 400, "one credit mode at a time, same as the form");
+
+  const emptied = await moderate(session, {
+    id: String(row.id),
+    status: "pending",
+    internalNotes: "",
+    body: "",
+  });
+  assert.equal(emptied.status, 400, "a body cannot be emptied into a blank tile");
+
+  const stillIntact = await rowByTitle(title);
+  assert.match(String(stillIntact.body), /A poem a moderator will try to break\./);
+});
+
+test("the rate-limit bucket cannot be chosen by the caller", async () => {
+  await resetRateLimits();
+  // Spend the allowance while claiming one address...
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const form = humanTimings(new FormData());
+    form.set("kind", "poem");
+    form.set("title", `Test Bucket ${attempt}`);
+    form.set("body", "Filling the hourly allowance.");
+    const response = await fetch(`${baseUrl}/api/contributions`, {
+      method: "POST",
+      body: form,
+      headers: { "x-forwarded-for": "203.0.113.7" },
+    });
+    assert.equal(response.status, 201);
+  }
+  // ...then claim a different one. The first XFF element is caller-controlled,
+  // so it must not select the bucket.
+  const spoofed = await fetch(`${baseUrl}/api/contributions`, {
+    method: "POST",
+    body: (() => {
+      const form = humanTimings(new FormData());
+      form.set("kind", "poem");
+      form.set("title", "Test Bucket Spoofed");
+      form.set("body", "Claiming a fresh address.");
+      return form;
+    })(),
+    headers: { "x-forwarded-for": "198.51.100.9, 203.0.113.7" },
+  });
+  assert.equal(spoofed.status, 429, "prepending an address does not buy a new allowance");
+});
+
+test("withdrawal cannot be laundered back through pending", async () => {
+  const title = "Test Withdraw Launder";
+  const sent = await submit({ kind: "poem", title, body: "A poem the author took down for good." });
+  const row = await rowByTitle(title);
+  const session = await adminSession();
+  await moderate(session, { id: String(row.id), status: "approved", internalNotes: "" });
+  assert.equal((await lookup(sent.body.recoveryCode, "withdraw")).status, 200);
+
+  // Blocking only `approved` was not enough: pending was the way around it.
+  const viaPending = await moderate(session, {
+    id: String(row.id),
+    status: "pending",
+    internalNotes: "",
+  });
+  assert.equal(viaPending.status, 409, "withdrawn is terminal, not merely un-approvable");
+
+  const wall = await (await fetch(`${baseUrl}/art`)).text();
+  assert.doesNotMatch(wall, new RegExp(title));
+});
+
+test("a Hindi contributor is refused in Hindi", async () => {
+  const form = humanTimings(new FormData());
+  form.set("kind", "poem");
+  form.set("title", "Test Hindi Rejection");
+  form.set("body", "सार्वजनिक डोमेन का दावा बिना स्रोत के।");
+  form.set("language", "hi");
+  form.set("provenance", "public_domain");
+  form.set("credit", "कोई पुराना कवि");
+  const response = await fetch(`${baseUrl}/api/contributions`, { method: "POST", body: form });
+  assert.equal(response.status, 400);
+  const message = String((await response.json()).error ?? "");
+  assert.match(message, /[ऀ-ॿ]/, "the refusal is in the language of the submission");
+});
+
+test("a curated public-domain work must be as checkable as a contributed one", async () => {
+  const session = await adminSession();
+  const bytes = await readFile("content/seed-art/poster-peaks.png");
+  const noSource = await addDirectly(
+    session,
+    {
+      kind: "image",
+      title: "Test Curated No Source",
+      subtitle: "",
+      credit: "Unknown photographer",
+      creditAccount: "",
+      provenance: "public_domain",
+      sourceUrl: "",
+      body: "",
+      language: "en",
+      status: "approved",
+    },
+    { bytes, type: "image/png", name: "p.png" },
+  );
+  assert.equal(noSource.status, 400, "curation cannot skip the licence page either");
+
+  const placeheld = await addDirectly(
+    session,
+    {
+      kind: "poster",
+      title: "Test Curated Placeholder",
+      subtitle: "",
+      credit: "The India Project",
+      creditAccount: "",
+      body: "",
+      language: "en",
+      status: "approved",
+      placeholder: "yes",
+    },
+    { bytes, type: "image/png", name: "p2.png" },
+  );
+  assert.equal(placeheld.status, 201);
+  const row = await rowByTitle("Test Curated Placeholder");
+  assert.equal(Number(row.placeholder), 1, "admin-added filler is counted as a placeholder");
+});
+
+test("a retained row keeps its original deletion date when edited", async () => {
+  const title = "Test Retention Frozen";
+  const sent = await submit({ kind: "poem", title, body: "A poem that will be declined." });
+  const row = await rowByTitle(title);
+  const session = await adminSession();
+  await moderate(session, {
+    id: String(row.id),
+    status: "declined",
+    declineReason: "off_topic",
+    internalNotes: "first pass",
+  });
+  const first = await rowByTitle(title);
+  assert.ok(first.retention_eligible_at, "declining sets a deletion date");
+
+  await moderate(session, {
+    id: String(row.id),
+    status: "declined",
+    declineReason: "off_topic",
+    internalNotes: "second pass, notes tidied",
+  });
+  const second = await rowByTitle(title);
+  assert.equal(
+    String(second.retention_eligible_at),
+    String(first.retention_eligible_at),
+    "editing notes does not push the deletion date out by another 180 days",
+  );
+});

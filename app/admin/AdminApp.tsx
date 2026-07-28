@@ -51,6 +51,7 @@ type Contribution = {
   internalNotes: string;
   declineReason: string | null;
   provenance?: string;
+  contentFingerprint?: string | null;
   sourceUrl?: string;
   placeholder?: boolean;
   createdAt: string;
@@ -770,6 +771,7 @@ function ContributionWorkspace({
           <ContributionCard
             key={`${contribution.id}-${contribution.status}`}
             contribution={contribution}
+            siblings={contributions}
             onSave={async (nextStatus, internalNotes, declineReason, fields) => {
               try {
                 await mutate({
@@ -800,10 +802,12 @@ function ContributionWorkspace({
 
 function ContributionCard({
   contribution,
+  siblings,
   onSave,
   onDelete,
 }: {
   contribution: Contribution;
+  siblings: Contribution[];
   onSave: (
     status: string,
     notes: string,
@@ -821,6 +825,16 @@ function ContributionCard({
   const [creditAccount, setCreditAccount] = useState(contribution.creditAccount);
   const [body, setBody] = useState(contribution.body);
   const isTextKind = contribution.kind === "poem" || contribution.kind === "essay";
+  // The fingerprint is recorded so a resubmitted file is visible to whoever is
+  // reviewing it; without surfacing it, "Already in the collection" relied on
+  // a moderator recognising the artwork by eye.
+  const duplicateOf = contribution.contentFingerprint
+    ? siblings.find(
+        (other) =>
+          other.id !== contribution.id &&
+          other.contentFingerprint === contribution.contentFingerprint,
+      )?.title ?? null
+    : null;
   return (
     <article className="volunteer-admin-card">
       <div>
@@ -830,7 +844,22 @@ function ContributionCard({
       <p>
         <strong>{contribution.kind}</strong>
         {contribution.seeded ? " · seed" : ""}
+        {contribution.placeholder ? " · placeholder" : ""}
+        {contribution.provenance === "public_domain" ? " · public domain" : ""}
       </p>
+      {duplicateOf && (
+        <p className="admin-placeholder-note">
+          Same file as “{duplicateOf}” already in the collection — “Already in the collection” is
+          a decline reason.
+        </p>
+      )}
+      {contribution.provenance === "public_domain" && contribution.sourceUrl && (
+        <p>
+          <a href={contribution.sourceUrl} target="_blank" rel="noreferrer noopener">
+            Check the source
+          </a>
+        </p>
+      )}
       <label>Title<input value={title} onChange={(event) => setTitle(event.target.value)} /></label>
       <label>Subtitle<input value={subtitle} onChange={(event) => setSubtitle(event.target.value)} /></label>
       <label>Credit (alias)<input value={credit} onChange={(event) => setCredit(event.target.value)} /></label>
@@ -913,6 +942,7 @@ function ContributionAddForm({
   setError: (value: string) => void;
 }) {
   const [kind, setKind] = useState("poster");
+  const [provenance, setProvenance] = useState("own");
   const [busy, setBusy] = useState(false);
   const isFileKind = kind === "poster" || kind === "image";
   return (
@@ -953,6 +983,25 @@ function ContributionAddForm({
         </label>
         <label>Language
           <select name="language" defaultValue="en"><option>en</option><option>hi</option></select>
+        </label>
+        {/* Curation is the only path for public-domain photographs and artwork,
+            because verifying one means reading a licence page. Without these
+            controls a curated public-domain work published as CC BY-NC-SA,
+            a licence the project does not hold. */}
+        <label>Rights
+          <select value={provenance} onChange={(event) => setProvenance(event.target.value)} name="provenance">
+            <option value="own">The India Project&apos;s own work (CC BY-NC-SA 4.0)</option>
+            <option value="public_domain">Public domain — someone else&apos;s work</option>
+          </select>
+        </label>
+        {provenance === "public_domain" && (
+          <label>Source (licence page a reviewer can check)
+            <input name="sourceUrl" type="url" required placeholder="https://commons.wikimedia.org/…" />
+          </label>
+        )}
+        <label className="admin-checkbox">
+          <input type="checkbox" name="placeholder" value="yes" />
+          Placeholder — remove once real work arrives
         </label>
         <label>Status
           <select name="status" defaultValue="approved"><option>approved</option><option>pending</option></select>

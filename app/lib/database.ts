@@ -13,6 +13,31 @@ import type {
   Update,
 } from "@/app/lib/content";
 
+const CONTRIBUTIONS_TABLE = `CREATE TABLE IF NOT EXISTS contributions (
+    id TEXT PRIMARY KEY NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('poster', 'image', 'poem', 'essay')),
+    title TEXT NOT NULL, subtitle TEXT NOT NULL DEFAULT '',
+    credit TEXT NOT NULL DEFAULT '', credit_account TEXT NOT NULL DEFAULT '',
+    body TEXT NOT NULL DEFAULT '',
+    language TEXT NOT NULL CHECK (language IN ('en', 'hi')),
+    storage_key TEXT, social_storage_key TEXT, mime_type TEXT,
+    width INTEGER, height INTEGER, byte_size INTEGER,
+    status TEXT NOT NULL DEFAULT 'pending'
+      CHECK (status IN ('pending', 'approved', 'declined', 'withdrawn')),
+    internal_notes TEXT NOT NULL DEFAULT '', content_fingerprint TEXT,
+    seeded INTEGER NOT NULL DEFAULT 0,
+    placeholder INTEGER NOT NULL DEFAULT 0,
+    provenance TEXT NOT NULL DEFAULT 'own'
+      CHECK (provenance IN ('own', 'public_domain')),
+    source_url TEXT NOT NULL DEFAULT '',
+    decline_reason TEXT CHECK (decline_reason IN
+      ('off_topic', 'not_own_work', 'not_public_domain', 'identifying_info',
+       'low_quality', 'duplicate', 'other')),
+    recovery_code_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+    reviewed_by TEXT, reviewed_at TEXT, retention_eligible_at TEXT
+  )`;
+
 export const migrationStatements = [
   `CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY NOT NULL, email TEXT NOT NULL, display_name TEXT NOT NULL,
@@ -75,30 +100,7 @@ export const migrationStatements = [
     created_at TEXT NOT NULL
   )`,
   "CREATE INDEX IF NOT EXISTS visitor_daily_date_idx ON visitor_daily_identifiers(visit_date)",
-  `CREATE TABLE IF NOT EXISTS contributions (
-    id TEXT PRIMARY KEY NOT NULL,
-    kind TEXT NOT NULL CHECK (kind IN ('poster', 'image', 'poem', 'essay')),
-    title TEXT NOT NULL, subtitle TEXT NOT NULL DEFAULT '',
-    credit TEXT NOT NULL DEFAULT '', credit_account TEXT NOT NULL DEFAULT '',
-    body TEXT NOT NULL DEFAULT '',
-    language TEXT NOT NULL CHECK (language IN ('en', 'hi')),
-    storage_key TEXT, social_storage_key TEXT, mime_type TEXT,
-    width INTEGER, height INTEGER, byte_size INTEGER,
-    status TEXT NOT NULL DEFAULT 'pending'
-      CHECK (status IN ('pending', 'approved', 'declined', 'withdrawn')),
-    internal_notes TEXT NOT NULL DEFAULT '', content_fingerprint TEXT,
-    seeded INTEGER NOT NULL DEFAULT 0,
-    placeholder INTEGER NOT NULL DEFAULT 0,
-    provenance TEXT NOT NULL DEFAULT 'own'
-      CHECK (provenance IN ('own', 'public_domain')),
-    source_url TEXT NOT NULL DEFAULT '',
-    decline_reason TEXT CHECK (decline_reason IN
-      ('off_topic', 'not_own_work', 'not_public_domain', 'identifying_info',
-       'low_quality', 'duplicate', 'other')),
-    recovery_code_hash TEXT NOT NULL,
-    created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
-    reviewed_by TEXT, reviewed_at TEXT, retention_eligible_at TEXT
-  )`,
+  CONTRIBUTIONS_TABLE,
   `CREATE UNIQUE INDEX IF NOT EXISTS contributions_recovery_code_unique
     ON contributions(recovery_code_hash)`,
   "CREATE INDEX IF NOT EXISTS contributions_status_idx ON contributions(status)",
@@ -157,8 +159,8 @@ export async function ensureDatabase() {
  */
 async function ensureContributionProvenance(db: Client) {
   const columns = await db.execute("PRAGMA table_info(contributions)");
+  if (columns.rows.length === 0) return;
   const names = new Set(columns.rows.map((row) => String(row.name)));
-  if (names.size === 0) return;
 
   if (!names.has("provenance")) {
     await db.execute(
@@ -178,34 +180,49 @@ async function ensureContributionProvenance(db: Client) {
   const existing = String(schema.rows[0]?.sql ?? "");
   if (!existing || existing.includes("not_public_domain")) return;
 
-  const rebuilt = String(
-    migrationStatements.find((statement) => statement.includes("CREATE TABLE IF NOT EXISTS contributions")),
-  ).replace("CREATE TABLE IF NOT EXISTS contributions", "CREATE TABLE contributions_rebuilt");
-  const shared = [...names].join(", ");
+  // Build the replacement first and ask the database which columns it has,
+  // rather than parsing the CREATE statement: two columns can share a line,
+  // and a filter that misses one silently drops that data.
+  const rebuilt = CONTRIBUTIONS_TABLE.replace(
+    "CREATE TABLE IF NOT EXISTS contributions",
+    "CREATE TABLE contributions_rebuilt",
+  );
+  // An orphan left by an interrupted attempt would otherwise make every later
+  // boot throw, and ensureDatabase() clears its cached promise on failure, so
+  // every request would retry and fail forever.
+  await db.execute("DROP TABLE IF EXISTS contributions_rebuilt");
+  await db.execute(rebuilt);
 
-  await db.execute("PRAGMA foreign_keys = OFF");
-  await db.execute("BEGIN");
-  try {
-    await db.execute(rebuilt);
-    await db.execute(
+  const [live, target] = await Promise.all([
+    db.execute("PRAGMA table_info(contributions)"),
+    db.execute("PRAGMA table_info(contributions_rebuilt)"),
+  ]);
+  const targetNames = new Set(target.rows.map((row) => String(row.name)));
+  // Only columns both definitions have: a column dropped from the schema must
+  // not make the copy fail on every deployment at once.
+  const shared = live.rows
+    .map((row) => String(row.name))
+    .filter((name) => targetNames.has(name))
+    .map((name) => `"${name}"`)
+    .join(", ");
+
+  // One batch, one transaction for the destructive half. Issuing
+  // BEGIN/COMMIT as separate statements is not a transaction on a remote
+  // libSQL client, which is exactly where this runs in production — a failure
+  // between DROP and RENAME would leave the table missing. The indexes are
+  // recreated inside it too, so there is never a window where the table has no
+  // unique index on recovery_code_hash.
+  await db.batch(
+    [
       `INSERT INTO contributions_rebuilt (${shared}) SELECT ${shared} FROM contributions`,
-    );
-    await db.execute("DROP TABLE contributions");
-    await db.execute("ALTER TABLE contributions_rebuilt RENAME TO contributions");
-    await db.execute("COMMIT");
-  } catch (error) {
-    await db.execute("ROLLBACK");
-    throw error;
-  } finally {
-    await db.execute("PRAGMA foreign_keys = ON");
-  }
-
-  // The indexes belonged to the dropped table.
-  for (const statement of migrationStatements) {
-    if (statement.includes("INDEX") && statement.includes("contributions")) {
-      await db.execute(statement);
-    }
-  }
+      "DROP TABLE contributions",
+      "ALTER TABLE contributions_rebuilt RENAME TO contributions",
+      ...migrationStatements.filter(
+        (statement) => statement.includes("INDEX") && statement.includes("contributions"),
+      ),
+    ],
+    "write",
+  );
 }
 
 async function ensureVolunteerContactColumns(db: Client) {

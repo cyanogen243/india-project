@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { ESSAY_MAX_LENGTH } from "@/app/lib/contributions";
 import {
   assertCsrf,
   clearSessionCookie,
@@ -60,6 +61,7 @@ export async function GET(request: NextRequest) {
                   FROM volunteer_submissions ORDER BY created_at DESC`),
       db.execute(`SELECT id, kind, title, subtitle, credit, credit_account, body,
                          language, provenance, source_url, placeholder,
+                         content_fingerprint,
                          storage_key, social_storage_key, mime_type,
                          width, height, byte_size, status, internal_notes, seeded,
                          decline_reason, created_at, updated_at, reviewed_by, reviewed_at
@@ -110,6 +112,7 @@ export async function GET(request: NextRequest) {
         seeded: Number(row.seeded) === 1,
         body: String(row.body),
         language: String(row.language),
+        contentFingerprint: row.content_fingerprint ? String(row.content_fingerprint) : null,
         provenance: String(row.provenance ?? "own"),
         sourceUrl: String(row.source_url ?? ""),
         placeholder: Number(row.placeholder ?? 0) === 1,
@@ -290,7 +293,10 @@ export async function POST(request: NextRequest) {
           subtitle: z.string().trim().max(120).optional(),
           credit: z.string().trim().max(80).optional(),
           creditAccount: z.string().trim().max(120).optional(),
-          body: z.string().max(40000).optional(),
+          // A poem edited past the poem cap, or a body emptied entirely, would
+          // produce a record the public form refuses — an empty tile, and a
+          // word count that reads "1 words".
+          body: z.string().min(4).max(ESSAY_MAX_LENGTH).optional(),
           declineReason: z
             .enum([
               "off_topic",
@@ -305,6 +311,15 @@ export async function POST(request: NextRequest) {
             .default(null),
         })
         .parse(body);
+      // Moderator edits go through the same content invariants the public form
+      // enforces, so an inline edit cannot produce a record the form would
+      // have refused: one credit mode, and a body within its kind's limits.
+      if (input.credit && input.creditAccount) {
+        return NextResponse.json(
+          { error: "Choose either an alias or a public account, not both." },
+          { status: 400 },
+        );
+      }
       if (input.status === "declined" && !input.declineReason) {
         return NextResponse.json(
           { error: "Choose a reason so the contributor knows why." },
@@ -313,7 +328,8 @@ export async function POST(request: NextRequest) {
       }
       const existing = await db.execute({
         sql: `SELECT kind, status, title, subtitle, credit, credit_account,
-                     body, storage_key, provenance FROM contributions WHERE id = ?`,
+                     body, storage_key, provenance, retention_eligible_at
+              FROM contributions WHERE id = ?`,
         args: [input.id],
       });
       const previous = existing.rows[0];
@@ -324,11 +340,14 @@ export async function POST(request: NextRequest) {
       // null the keys. Approving such a row again would put a permanently
       // broken card on the wall and republish work its contributor took down.
       const isFileKind = previous.kind === "poster" || previous.kind === "image";
-      if (input.status === "approved" && previous.status === "withdrawn") {
+      // Withdrawal is terminal. Blocking only `approved` was not enough: a row
+      // could be moved to `pending` first and approved from there, which put
+      // work back on the wall that its author had taken down.
+      if (previous.status === "withdrawn" && input.status !== "withdrawn") {
         return NextResponse.json(
           {
             error:
-              "The contributor took this down. It cannot be published again without a fresh submission.",
+              "The contributor took this down. It cannot be republished without a fresh submission.",
           },
           { status: 409 },
         );
@@ -344,10 +363,14 @@ export async function POST(request: NextRequest) {
       }
 
       const now = new Date();
-      const retention =
-        input.status === "declined" || input.status === "withdrawn"
-          ? new Date(now.getTime() + 180 * 24 * 60 * 60 * 1000).toISOString()
-          : null;
+      // Set when the row first enters a retained state and left alone after
+      // that: recomputing it on every save would push the deletion date out by
+      // another 180 days each time a moderator touched their notes.
+      const entersRetention = input.status === "declined" || input.status === "withdrawn";
+      const retention = entersRetention
+        ? String(previous.retention_eligible_at ?? "") ||
+          new Date(now.getTime() + 180 * 24 * 60 * 60 * 1000).toISOString()
+        : null;
       await db.execute({
         sql: `UPDATE contributions
               SET status = ?, internal_notes = ?, decline_reason = ?,

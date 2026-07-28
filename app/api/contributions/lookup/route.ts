@@ -13,9 +13,19 @@ const lookupSchema = z.object({
 });
 
 function remoteIdentifier(request: NextRequest) {
+  // Cloudflare sets CF-Connecting-IP itself and appends the client to any
+  // inbound X-Forwarded-For, so trusting the first XFF element lets a caller
+  // choose their own rate-limit bucket. Prefer the header the edge controls;
+  // fall back to the last XFF element, which is the one the nearest proxy
+  // appended rather than anything the client sent.
+  const forwarded = request.headers
+    .get("x-forwarded-for")
+    ?.split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
   return (
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
     request.headers.get("cf-connecting-ip") ||
+    forwarded?.[forwarded.length - 1] ||
     "unknown"
   );
 }

@@ -22,6 +22,7 @@ const fieldsSchema = z.object({
   // public domain for writing only.
   provenance: z.enum(["own", "public_domain"]).default("own"),
   sourceUrl: z.string().trim().max(500),
+  placeholder: z.enum(["yes", ""]).optional(),
   title: z.string().trim().min(2).max(120),
   subtitle: z.string().trim().max(120),
   credit: z.string().trim().max(80),
@@ -48,6 +49,7 @@ export async function POST(request: NextRequest) {
       title: form.get("title"),
       provenance: form.get("provenance") ?? "own",
       sourceUrl: form.get("sourceUrl") ?? "",
+      placeholder: form.get("placeholder") ?? "",
       subtitle: form.get("subtitle") ?? "",
       credit: form.get("credit") ?? "",
       creditAccount: form.get("creditAccount") ?? "",
@@ -55,6 +57,20 @@ export async function POST(request: NextRequest) {
       language: form.get("language"),
       status: form.get("status") ?? "approved",
     });
+
+    // Same standard as the public form: a public-domain claim needs an author
+    // and a link, or it is unverifiable.
+    if (fields.provenance === "public_domain") {
+      if (!fields.credit) {
+        return NextResponse.json({ error: "Name the author of the original work." }, { status: 400 });
+      }
+      if (!/^https:\/\/\S+$/.test(fields.sourceUrl)) {
+        return NextResponse.json(
+          { error: "Link the licence page so another reviewer can check it." },
+          { status: 400 },
+        );
+      }
+    }
 
     const isFileKind = fields.kind === "poster" || fields.kind === "image";
 
@@ -105,15 +121,16 @@ export async function POST(request: NextRequest) {
     await db.execute({
       sql: `INSERT INTO contributions
         (id, kind, title, subtitle, credit, credit_account, provenance, source_url,
-         body, language,
+         placeholder, body, language,
          storage_key, social_storage_key, mime_type, width, height, byte_size,
          status, internal_notes, content_fingerprint, recovery_code_hash,
          reviewed_by, reviewed_at, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Added by admin', ?, ?, ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Added by admin', ?, ?, ?, ?, ?, ?)`,
       args: [
         id, fields.kind, fields.title, fields.subtitle, fields.credit,
         fields.creditAccount, fields.provenance,
         fields.provenance === "public_domain" ? fields.sourceUrl : "",
+        fields.placeholder === "yes" ? 1 : 0,
         isFileKind ? "" : fields.body, fields.language,
         storageKey, socialStorageKey, mimeType, width, height, byteSize,
         fields.status, fingerprint, unusableHash, user.id, now, now, now,

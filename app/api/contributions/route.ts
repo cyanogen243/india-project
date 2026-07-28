@@ -58,9 +58,19 @@ function validationResponse(error: z.ZodError) {
 }
 
 function remoteIdentifier(request: NextRequest) {
+  // Cloudflare sets CF-Connecting-IP itself and appends the client to any
+  // inbound X-Forwarded-For, so trusting the first XFF element lets a caller
+  // choose their own rate-limit bucket. Prefer the header the edge controls;
+  // fall back to the last XFF element, which is the one the nearest proxy
+  // appended rather than anything the client sent.
+  const forwarded = request.headers
+    .get("x-forwarded-for")
+    ?.split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
   return (
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
     request.headers.get("cf-connecting-ip") ||
+    forwarded?.[forwarded.length - 1] ||
     "unknown"
   );
 }
@@ -71,10 +81,48 @@ function remoteIdentifier(request: NextRequest) {
 // poem anyway; newlines and tabs stay.
 function withoutControlCharacters(value: unknown) {
   return typeof value === "string"
-    // eslint-disable-next-line no-control-regex
     ? value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
     : value;
 }
+
+// The form is bilingual but every rejection it renders comes from here, so a
+// Hindi contributor was shown Hindi UI and an English refusal. Messages are
+// chosen by the language the submission itself declares.
+type Bilingual = { en: string; hi: string };
+function say(language: string, message: Bilingual) {
+  return language === "hi" ? message.hi : message.en;
+}
+
+const MESSAGES = {
+  rateLimited: {
+    en: "Too many submissions. Please try again later.",
+    hi: "बहुत सारे योगदान भेजे जा चुके हैं। थोड़ी देर बाद कोशिश करें।",
+  },
+  oneCreditMode: {
+    en: "Choose either an alias or a public account, not both.",
+    hi: "उपनाम या सार्वजनिक खाता — दोनों में से एक चुनें।",
+  },
+  publicDomainWritingOnly: {
+    en: "Public-domain sharing is available for poems and essays.",
+    hi: "सार्वजनिक डोमेन का विकल्प कविता और लेख के लिए है।",
+  },
+  needAuthor: {
+    en: "Name the author of the original work.",
+    hi: "मूल रचना के लेखक का नाम दें।",
+  },
+  needSource: {
+    en: "Link where this was published, so a volunteer can check it. The link must start with https://",
+    hi: "यह कहाँ प्रकाशित है उसका लिंक दें ताकि स्वयंसेवक जाँच सके। लिंक https:// से शुरू होना चाहिए।",
+  },
+  notYourAccount: {
+    en: "Someone else's work cannot be credited to your account.",
+    hi: "किसी और की रचना का श्रेय आपके खाते को नहीं दिया जा सकता।",
+  },
+  unreadableImage: {
+    en: "That image could not be read. Try re-saving it as a PNG or JPEG.",
+    hi: "यह तस्वीर पढ़ी नहीं जा सकी। इसे PNG या JPEG में दोबारा सहेजकर भेजें।",
+  },
+} satisfies Record<string, Bilingual>;
 
 export async function POST(request: NextRequest) {
   try {
@@ -83,9 +131,12 @@ export async function POST(request: NextRequest) {
     // only spent once the work is actually stored — a rejected file or a
     // validation error should not cost a visitor an hour of access.
     const identifier = remoteIdentifier(request);
+    // Before the body is parsed the declared language is not known yet; the
+    // referring page is the next best signal for which copy to send back.
+    const requestLanguage = /\/hi(\/|$)/.test(request.headers.get("referer") ?? "") ? "hi" : "en";
     if (await rateLimitExceeded("contribution-submit", identifier, 5)) {
       return NextResponse.json(
-        { error: "Too many submissions. Please try again later." },
+        { error: say(requestLanguage, MESSAGES.rateLimited) },
         { status: 429 },
       );
     }
@@ -110,7 +161,7 @@ export async function POST(request: NextRequest) {
     // account for credited work — never both.
     if (fields.credit && fields.creditAccount) {
       return NextResponse.json(
-        { error: "Choose either an alias or a public account, not both." },
+        { error: say(fields.language, MESSAGES.oneCreditMode) },
         { status: 400 },
       );
     }
@@ -121,7 +172,7 @@ export async function POST(request: NextRequest) {
     if (fields.provenance === "public_domain") {
       if (fields.kind !== "poem" && fields.kind !== "essay") {
         return NextResponse.json(
-          { error: "Public-domain sharing is available for poems and essays.", field: "kind" },
+          { error: say(fields.language, MESSAGES.publicDomainWritingOnly), field: "kind" },
           { status: 400 },
         );
       }
@@ -129,19 +180,19 @@ export async function POST(request: NextRequest) {
       // "public domain" becomes an honour system.
       if (!fields.credit) {
         return NextResponse.json(
-          { error: "Name the author of the original work.", field: "credit" },
+          { error: say(fields.language, MESSAGES.needAuthor), field: "credit" },
           { status: 400 },
         );
       }
       if (!/^https:\/\/\S+$/.test(fields.sourceUrl)) {
         return NextResponse.json(
-          { error: "Link where this was published, so a volunteer can check it.", field: "sourceUrl" },
+          { error: say(fields.language, MESSAGES.needSource), field: "sourceUrl" },
           { status: 400 },
         );
       }
       if (fields.creditAccount) {
         return NextResponse.json(
-          { error: "Someone else's work cannot be credited to your account.", field: "creditAccount" },
+          { error: say(fields.language, MESSAGES.notYourAccount), field: "creditAccount" },
           { status: 400 },
         );
       }
@@ -220,7 +271,7 @@ export async function POST(request: NextRequest) {
     );
     if (!allowed) {
       return NextResponse.json(
-        { error: "Too many submissions. Please try again later." },
+        { error: say(fields.language, MESSAGES.rateLimited) },
         { status: 429 },
       );
     }
@@ -278,7 +329,7 @@ export async function POST(request: NextRequest) {
     const raw = error instanceof Error ? error.message : "";
     const message = /Only PNG, JPEG and WebP images are accepted/.test(raw)
       ? raw
-      : "That image could not be read. Try re-saving it as a PNG or JPEG.";
+      : say(/\/hi(\/|$)/.test(request.headers.get("referer") ?? "") ? "hi" : "en", MESSAGES.unreadableImage);
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }
