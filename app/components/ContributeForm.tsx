@@ -176,11 +176,6 @@ export function ContributeForm({ language }: { language: Language }) {
               ? "स्वीकृत काम CC BY-NC-SA 4.0 के तहत जारी होगा: कोई भी इसे मुफ़्त साझा और रीमिक्स कर सकता है, पर बेच नहीं सकता।"
               : "Approved work is released under CC BY-NC-SA 4.0 — anyone may share and remix it freely, but nobody may sell it."}
           </li>
-          <li>
-            {hindi
-              ? "ऐसा कुछ न भेजें जिससे किसी की पहचान हो सके।"
-              : "Do not send anything that could identify a person."}
-          </li>
         </ul>
       </aside>
 
