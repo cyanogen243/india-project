@@ -56,7 +56,7 @@ const SEEDS: SeedItem[] = [
   { id: "5eed0003-0000-4000-8000-000000000001", kind: "poem", title: "दोहा", credit: "कबीर (Kabir)", language: "hi", textFile: "poem-kabir-doha.txt", sortAt: wallSlot(2) },
   { id: "5eed0003-0000-4000-8000-000000000002", kind: "poem", title: "दोहा", credit: "रहीम (Rahim)", language: "hi", textFile: "poem-rahim-doha.txt", sortAt: wallSlot(6) },
   { id: "5eed0003-0000-4000-8000-000000000003", kind: "poem", title: "Where the Mind Is Without Fear", subtitle: "Gitanjali 35", credit: "Rabindranath Tagore", language: "en", textFile: "poem-where-the-mind.txt", sortAt: wallSlot(8) },
-  { id: "5eed0003-0000-4000-8000-000000000004", kind: "poem", title: "फ़रमान-ए-ख़ुदा", subtitle: "फ़रिशतों से", credit: "मुहम्मद इक़बाल (Muhammad Iqbal)", language: "hi", textFile: "poem-farman-e-khuda.txt", sortAt: wallSlot(7) },
+  { id: "5eed0003-0000-4000-8000-000000000004", kind: "poem", title: "फ़रमान-ए-ख़ुदा", subtitle: "फ़रिशतों से — to the angels", credit: "मुहम्मद इक़बाल (Muhammad Iqbal)", language: "hi", textFile: "poem-farman-e-khuda.txt", sortAt: wallSlot(7) },
 
   // Essay — permanent. Verbatim from marxists.org/archive/bhagat-singh/1931/02/02.htm
   { id: "5eed0004-0000-4000-8000-000000000001", kind: "essay", title: "To Young Political Workers", subtitle: "A letter, February 1931", credit: "Bhagat Singh", language: "en", textFile: "essay-to-young-political-workers.txt", sortAt: wallSlot(4) },
