@@ -50,6 +50,8 @@ export const volunteerSubmissions = sqliteTable(
       .notNull()
       .default("telegram"),
     contactHandle: text("contact_handle").notNull().default(""),
+    city: text("city").notNull().default(""),
+    team: text("team").notNull().default(""),
     skillsJson: text("skills_json").notNull(),
     languagesJson: text("languages_json").notNull(),
     availability: text("availability").notNull(),
@@ -69,6 +71,7 @@ export const volunteerSubmissions = sqliteTable(
   (table) => [
     index("volunteers_status_idx").on(table.status),
     index("volunteers_created_idx").on(table.createdAt),
+    index("volunteers_team_idx").on(table.team),
   ],
 );
 

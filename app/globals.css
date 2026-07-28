@@ -1672,6 +1672,12 @@ footer p {
   gap: 1rem;
 }
 
+.field-hint {
+  margin: -0.3rem 0 0.8rem;
+  font-size: 0.9rem;
+  opacity: 0.75;
+}
+
 .volunteer-form label,
 .admin-shell label,
 .volunteer-form legend {
@@ -1910,10 +1916,64 @@ footer p {
   border-color: #750f14;
 }
 
+.volunteer-filter-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.8rem;
+  margin-bottom: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  background: white;
+}
+
+.volunteer-filter-bar label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.volunteer-filter-bar select {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.volunteer-filter-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.volunteer-empty {
+  padding: 2rem 1rem;
+  text-align: center;
+  border: 1px dashed var(--line);
+  background: white;
+}
+
 .volunteer-admin-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
+}
+
+.volunteer-filter-summary {
+  margin-bottom: 1rem;
+}
+
+.volunteer-admin-empty {
+  grid-column: 1 / -1;
+  padding: 1rem;
+  border: 1px dashed var(--line);
+  color: var(--ink-soft);
 }
 
 .volunteer-admin-card {
@@ -1931,6 +1991,15 @@ footer p {
   /* Baseline, not the default stretch — a stretched status badge with its
      999px radius balloons into a circle. */
   align-items: baseline;
+}
+
+.volunteer-team {
+  justify-self: start;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  border: 1px solid var(--line);
+  background: #f6f1e6;
 }
 
 .admin-create-user {

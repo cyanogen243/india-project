@@ -3,6 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { filterVolunteers } from "./volunteer-filter";
+import {
+  volunteerCapabilities,
+  volunteerCapabilityLabel,
+  volunteerTeamLabel,
+  volunteerTeams,
+} from "@/app/lib/volunteers";
 
 type User = {
   id: string;
@@ -21,6 +28,8 @@ type Volunteer = {
   email: string;
   contactPlatform: "whatsapp" | "telegram" | "discord";
   contactHandle: string;
+  city: string;
+  team: string;
   skills: string[];
   languages: string[];
   availability: string;
@@ -92,6 +101,7 @@ function accountDisplayName(user: Pick<User, "displayName" | "role">) {
 }
 
 const statuses = ["new", "contacted", "accepted", "declined", "archived"];
+const contactPlatforms = ["whatsapp", "telegram", "discord"];
 
 const contributionStatuses = ["pending", "approved", "declined", "withdrawn"];
 
@@ -635,27 +645,174 @@ function VolunteerWorkspace({
 }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
-  const filtered = volunteers.filter(
-    (item) =>
-      (status === "all" || item.status === status) &&
-      `${item.name} ${item.email} ${item.contactPlatform} ${item.contactHandle} ${item.skills.join(" ")}`
-        .toLowerCase()
-        .includes(query.toLowerCase()),
+  const [platform, setPlatform] = useState("all");
+  const [team, setTeam] = useState("all");
+  const [city, setCity] = useState("all");
+  const [skill, setSkill] = useState("all");
+  const [spokenLanguage, setSpokenLanguage] = useState("all");
+  const [formLanguage, setFormLanguage] = useState("all");
+  const [sort, setSort] = useState("newest");
+
+  const spokenLanguageOptions = useMemo(
+    () =>
+      Array.from(new Set(volunteers.flatMap((item) => item.languages)))
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b)),
+    [volunteers],
   );
+
+  const cityOptions = useMemo(
+    () =>
+      Array.from(new Set(volunteers.map((item) => item.city)))
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b)),
+    [volunteers],
+  );
+
+  // Derived rather than fixed so that records captured under an older
+  // capability list stay filterable after the list changes.
+  const skillOptions = useMemo(() => {
+    const present = new Set(volunteers.flatMap((item) => item.skills));
+    const known = volunteerCapabilities.filter((item) => present.has(item));
+    const legacy = Array.from(present)
+      .filter((item) => !volunteerCapabilities.includes(item as never))
+      .sort((a, b) => a.localeCompare(b));
+    return [...known, ...legacy];
+  }, [volunteers]);
+
+  // Teams are assigned in review, not asked for on the public form, so the
+  // filter stays hidden until at least one record has been bucketed.
+  const teamsAssigned = useMemo(
+    () => volunteers.some((item) => item.team),
+    [volunteers],
+  );
+
+  const visible = useMemo(
+    () =>
+      filterVolunteers(volunteers, {
+        query,
+        status,
+        platform,
+        team,
+        city,
+        skill,
+        spokenLanguage,
+        formLanguage,
+        sort,
+      }),
+    [
+      volunteers,
+      query,
+      status,
+      platform,
+      team,
+      city,
+      skill,
+      spokenLanguage,
+      formLanguage,
+      sort,
+    ],
+  );
+
+  const activeFilters =
+    (query.trim() ? 1 : 0) +
+    [status, platform, team, city, skill, spokenLanguage, formLanguage].filter(
+      (value) => value !== "all",
+    ).length;
+
+  function clearFilters() {
+    setQuery("");
+    setStatus("all");
+    setPlatform("all");
+    setTeam("all");
+    setCity("all");
+    setSkill("all");
+    setSpokenLanguage("all");
+    setFormLanguage("all");
+  }
+
   return (
     <section className="admin-panel">
       <div className="admin-panel-heading">
         <div><p className="eyebrow">Private intake</p><h2>Volunteer submissions</h2></div>
         <div className="admin-actions">
-          <input aria-label="Search volunteers" placeholder="Search" value={query} onChange={(event) => setQuery(event.target.value)} />
-          <select aria-label="Filter by status" value={status} onChange={(event) => setStatus(event.target.value)}>
-            <option value="all">All statuses</option>
-            {statuses.map((item) => <option key={item}>{item}</option>)}
-          </select>
+          <input aria-label="Search volunteers" placeholder="Search name, email, handle, notes" value={query} onChange={(event) => setQuery(event.target.value)} />
         </div>
       </div>
+      <div className="volunteer-filter-bar">
+        <label>Status
+          <select value={status} onChange={(event) => setStatus(event.target.value)}>
+            <option value="all">All statuses</option>
+            {statuses.map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
+        </label>
+        {teamsAssigned && (
+          <label>Team
+            <select value={team} onChange={(event) => setTeam(event.target.value)}>
+              <option value="all">All teams</option>
+              {volunteerTeams.map((item) => <option key={item} value={item}>{volunteerTeamLabel(item)}</option>)}
+            </select>
+          </label>
+        )}
+        <label>City
+          <select value={city} onChange={(event) => setCity(event.target.value)}>
+            <option value="all">All cities</option>
+            {cityOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
+        </label>
+        <label>Platform
+          <select value={platform} onChange={(event) => setPlatform(event.target.value)}>
+            <option value="all">All platforms</option>
+            {contactPlatforms.map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
+        </label>
+        <label>Can help with
+          <select value={skill} onChange={(event) => setSkill(event.target.value)}>
+            <option value="all">Anything</option>
+            {skillOptions.map((item) => <option key={item} value={item}>{volunteerCapabilityLabel(item)}</option>)}
+          </select>
+        </label>
+        <label>Language
+          <select value={spokenLanguage} onChange={(event) => setSpokenLanguage(event.target.value)}>
+            <option value="all">All languages</option>
+            {spokenLanguageOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
+        </label>
+        <label>Submitted in
+          <select value={formLanguage} onChange={(event) => setFormLanguage(event.target.value)}>
+            <option value="all">Both forms</option>
+            <option value="en">English form</option>
+            <option value="hi">Hindi form</option>
+          </select>
+        </label>
+        <label>Sort by
+          <select value={sort} onChange={(event) => setSort(event.target.value)}>
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="name-asc">Name A–Z</option>
+            <option value="name-desc">Name Z–A</option>
+            <option value="email-asc">Email A–Z</option>
+            <option value="email-desc">Email Z–A</option>
+            <option value="city-asc">City A–Z</option>
+            {teamsAssigned && <option value="team-asc">Team</option>}
+            <option value="availability-asc">Availability A–Z</option>
+            <option value="platform-asc">Platform A–Z</option>
+            <option value="status">Status pipeline</option>
+          </select>
+        </label>
+      </div>
+      <div className="volunteer-filter-summary" aria-live="polite">
+        <span>
+          Showing {visible.length} of {volunteers.length} {volunteers.length === 1 ? "submission" : "submissions"}
+          {activeFilters > 0 && ` · ${activeFilters} ${activeFilters === 1 ? "filter" : "filters"} active`}
+        </span>
+        {activeFilters > 0 && <button className="button" onClick={clearFilters}>Clear filters</button>}
+      </div>
+      {volunteers.length > 0 && visible.length === 0 && (
+        <p className="volunteer-empty">No submissions match these filters.</p>
+      )}
       <div className="volunteer-admin-grid">
-        {filtered.map((volunteer) => (
+        {visible.map((volunteer) => (
           <VolunteerCard
             key={`${volunteer.id}-${volunteer.status}-${volunteer.internalNotes}`}
             volunteer={volunteer}
@@ -694,9 +851,11 @@ function VolunteerCard({
     <article className="volunteer-admin-card">
       <div><span className={`badge badge-${status}`}>{status}</span><small>{new Date(volunteer.createdAt).toLocaleString("en-IN")}</small></div>
       <h3>{volunteer.name}</h3>
+      {volunteer.team && <p className="volunteer-team">{volunteerTeamLabel(volunteer.team)}</p>}
       <a href={`mailto:${volunteer.email}`}>{volunteer.email}</a>
+      <p><strong>City:</strong> {volunteer.city || "Not provided"}</p>
       <p><strong>{volunteer.contactPlatform}:</strong> {volunteer.contactHandle || "Not provided"}</p>
-      <p><strong>Skills:</strong> {volunteer.skills.join(", ")}</p>
+      <p><strong>Can help with:</strong> {volunteer.skills.map((item) => volunteerCapabilityLabel(item)).join(", ")}</p>
       <p><strong>Languages:</strong> {volunteer.languages.join(", ")}</p>
       <p><strong>Availability:</strong> {volunteer.availability}</p>
       <p>{volunteer.note}</p>

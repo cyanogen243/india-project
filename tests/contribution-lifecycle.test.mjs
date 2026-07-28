@@ -1109,6 +1109,7 @@ test("a curated public-domain work must be as checkable as a contributed one", a
 test("a retained row keeps its original deletion date when edited", async () => {
   const title = "Test Retention Frozen";
   const sent = await submit({ kind: "poem", title, body: "A poem that will be declined." });
+  assert.equal(sent.status, 201);
   const row = await rowByTitle(title);
   const session = await adminSession();
   await moderate(session, {

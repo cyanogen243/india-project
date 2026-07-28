@@ -21,9 +21,10 @@
     "db:generate": "drizzle-kit generate",
     "admin:bootstrap": "tsx scripts/bootstrap-admin.ts",
     "typecheck": "tsc --noEmit",
-    "test": "npm run build && node --test tests/vercel-rendered-html.test.mjs tests/contribution-lifecycle.test.mjs",
+    "test": "npm run test:unit && npm run build && node --test tests/vercel-rendered-html.test.mjs tests/contribution-lifecycle.test.mjs",
+    "test:unit": "tsx --test tests/volunteer-filter.test.ts",
     "test:sites": "npm run build:sites && node --test tests/rendered-html.test.mjs",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern .output",
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern .output --ignore-pattern .astro --ignore-pattern .netlify --ignore-pattern dist-demo --ignore-pattern test-results",
     "seed:art": "tsx scripts/seed-contributions.ts",
     "purge:expired": "tsx scripts/purge-expired.ts"
   },
