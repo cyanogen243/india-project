@@ -130,7 +130,10 @@ test("renders Hindi and keeps removed or hidden routes unavailable", async () =>
   assert.equal(hiddenMediaArchive.status, 404);
   assert.match(await hindi.text(), /स्वयंसेवा करें/i);
   const volunteerHtml = await volunteer.text();
-  assert.match(volunteerHtml, /Join the tech team/i);
+  assert.match(volunteerHtml, /How can you help\?/i);
+  assert.match(volunteerHtml, /Research and fact-checking/i);
+  assert.match(volunteerHtml, /On-the-ground help in my city/i);
+  assert.doesNotMatch(volunteerHtml, /Which team would you like to join/i);
   assert.match(volunteerHtml, /WhatsApp/i);
   assert.match(volunteerHtml, /Telegram/i);
   assert.match(volunteerHtml, /Discord/i);
@@ -229,7 +232,8 @@ test("accepts volunteers and enforces the audited admin workflow", async () => {
       email: "test@example.com",
       contactPlatform: "discord",
       contactHandle: "sad",
-      skills: ["translation", "tech-team"],
+      city: "Bengaluru",
+      skills: ["translation", "technical"],
       languages: ["English"],
       availability: "S",
       note: "I would like to support the volunteer team remotely.",
@@ -252,7 +256,8 @@ test("accepts volunteers and enforces the audited admin workflow", async () => {
       email: "volunteer@example.test",
       contactPlatform: "telegram",
       contactHandle: "@reviewvolunteer",
-      skills: ["source-review", "tech-team"],
+      city: "New Delhi",
+      skills: ["research", "technical", "on-ground"],
       languages: ["English", "Hindi"],
       availability: "Three hours each week",
       note: "I can review sources and help prepare clear bilingual summaries.",
@@ -266,7 +271,7 @@ test("accepts volunteers and enforces the audited admin workflow", async () => {
 
   const testDatabase = createClient({ url: `file:${testDbPath}` });
   const persistedVolunteer = await testDatabase.execute({
-    sql: `SELECT email, contact_platform, contact_handle, skills_json
+    sql: `SELECT email, contact_platform, contact_handle, city, team, skills_json
           FROM volunteer_submissions WHERE email = ?`,
     args: ["volunteer@example.test"],
   });
@@ -276,8 +281,10 @@ test("accepts volunteers and enforces the audited admin workflow", async () => {
   assert.equal(persistedVolunteer.rows[0].contact_handle, "@reviewvolunteer");
   assert.deepEqual(
     JSON.parse(String(persistedVolunteer.rows[0].skills_json)),
-    ["source-review", "tech-team"],
+    ["research", "technical", "on-ground"],
   );
+  assert.equal(persistedVolunteer.rows[0].city, "New Delhi");
+  assert.equal(persistedVolunteer.rows[0].team, "");
 
   const anonymous = await fetch(`${baseUrl}/api/admin`);
   assert.deepEqual(await anonymous.json(), { authenticated: false });
@@ -318,6 +325,12 @@ test("accepts volunteers and enforces the audited admin workflow", async () => {
   assert.equal(adminData.volunteers[0].email, "volunteer@example.test");
   assert.equal(adminData.volunteers[0].contactPlatform, "telegram");
   assert.equal(adminData.volunteers[0].contactHandle, "@reviewvolunteer");
+  assert.equal(adminData.volunteers[0].city, "New Delhi");
+  assert.deepEqual(adminData.volunteers[0].skills, [
+    "research",
+    "technical",
+    "on-ground",
+  ]);
 
   const volunteerUpdate = await adminRequest({
     action: "volunteer_update",
