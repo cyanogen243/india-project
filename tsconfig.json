@@ -19,7 +19,8 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "sharp": ["./node_modules/sharp/lib/index.d.ts"]
     }
   },
   "include": [

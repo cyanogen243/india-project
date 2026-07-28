@@ -5,7 +5,8 @@ import {
   type Language,
   type MediaRecord,
 } from "@/app/lib/content";
-import { loadPublishedContent } from "@/app/lib/database";
+import Link from "next/link";
+import { loadApprovedContributions, loadPublishedContent } from "@/app/lib/database";
 import mediaData from "@/content/media.json";
 import { LiveUpdates } from "./LiveUpdates";
 import { FreshSourceScan } from "./FreshSourceScan";
@@ -13,6 +14,9 @@ import { CjpXFeed } from "./CjpXFeed";
 import { ShareReceipt } from "./ShareReceipt";
 import { SiteShell } from "./SiteShell";
 import { VolunteerForm } from "./VolunteerForm";
+import { ContributeForm } from "./ContributeForm";
+import { RecoveryCodeLookup } from "./RecoveryCodeLookup";
+import { ContributionGallery } from "./ContributionGallery";
 
 export type PageKind =
   | "home"
@@ -23,6 +27,8 @@ export type PageKind =
   | "reading-room"
   | "resources"
   | "volunteer"
+  | "kit"
+  | "contribute"
   | "corrections"
   | "evidence"
   | "text"
@@ -41,6 +47,8 @@ const titles: Record<Language, Record<PageKind, string>> = {
     "reading-room": "Reading room",
     resources: "Partners and trusted resources",
     volunteer: "Volunteer with The India Project",
+    kit: "Poster and writing kit",
+    contribute: "Share your poster or writing",
     corrections: "Corrections and retractions",
     evidence: "Sensitive evidence intake",
     text: "Low-bandwidth summary",
@@ -58,6 +66,8 @@ const titles: Record<Language, Record<PageKind, string>> = {
     "reading-room": "पठन कक्ष",
     resources: "साझेदार और विश्वसनीय संसाधन",
     volunteer: "द इंडिया प्रोजेक्ट के साथ स्वयंसेवा",
+    kit: "पोस्टर और लेखन किट",
+    contribute: "अपना पोस्टर या लेखन साझा करें",
     corrections: "सुधार और वापसी",
     evidence: "संवेदनशील साक्ष्य जमा करना",
     text: "कम-बैंडविड्थ सारांश",
@@ -475,6 +485,62 @@ function ResourcesPage({ language, data }: { language: Language; data: ContentBu
   );
 }
 
+async function KitPage({ language }: { language: Language }) {
+  const hindi = language === "hi";
+  const items = await loadApprovedContributions();
+  return (
+    <>
+      <PageHeader
+        language={language}
+        kind="kit"
+        intro={
+          hindi
+            ? "आंदोलन के लिए बनाए गए पोस्टर, कलाकृति और लेखन। मुफ़्त डाउनलोड करें, छापें और साझा करें।"
+            : "Posters, artwork and writing made for the movement. Free to download, print and share."
+        }
+      />
+      <p>
+        <Link className="button button-primary" href={hindi ? "/hi/contribute" : "/contribute"}>
+          {hindi ? "अपना काम साझा करें" : "Share your own work"}
+        </Link>
+      </p>
+      <ContributionGallery items={items} language={language} />
+    </>
+  );
+}
+
+function ContributePage({ language }: { language: Language }) {
+  const hindi = language === "hi";
+  return (
+    <>
+      <PageHeader
+        language={language}
+        kind="contribute"
+        intro={
+          hindi
+            ? "अपना बनाया पोस्टर, कलाकृति, कविता या लेख भेजें। हम आपका नाम या ईमेल नहीं माँगते।"
+            : "Send a poster, artwork, poem or piece of writing you made. We ask for no name and no email."
+        }
+      />
+      <div className="volunteer-layout">
+        <aside>
+          <p className="eyebrow">{hindi ? "यह कैसे काम करता है" : "How this works"}</p>
+          <h2>{hindi ? "हर चीज़ की समीक्षा होती है" : "Everything is reviewed"}</h2>
+          <ul>
+            <li>{hindi ? "कोई खाता नहीं, कोई ईमेल नहीं" : "No account, no email"}</li>
+            <li>{hindi ? "तस्वीरें दोबारा बनाई जाती हैं, छिपी जानकारी हट जाती है" : "Images are rebuilt, stripping hidden data"}</li>
+            <li>{hindi ? "स्वयंसेवक की मंज़ूरी के बाद ही सार्वजनिक" : "Public only after a volunteer approves it"}</li>
+            <li>{hindi ? "आपको एक कोड मिलेगा जिससे आप इसे हटा सकते हैं" : "You get a code to take it down again"}</li>
+          </ul>
+          <p className="eyebrow">{hindi ? "पहले से भेजा है?" : "Already sent something?"}</p>
+          <RecoveryCodeLookup language={language} />
+        </aside>
+        <ContributeForm language={language} />
+      </div>
+    </>
+  );
+}
+
 function VolunteerPage({ language }: { language: Language }) {
   const hindi = language === "hi";
   return (
@@ -518,6 +584,8 @@ export async function PublicPage({
     case "reading-room": content = <ReadingRoomPage language={language} data={data} />; break;
     case "resources": content = <ResourcesPage language={language} data={data} />; break;
     case "volunteer": content = <VolunteerPage language={language} />; break;
+    case "kit": content = <KitPage language={language} />; break;
+    case "contribute": content = <ContributePage language={language} />; break;
     case "corrections": content = <CorrectionsPage language={language} data={data} />; break;
     case "evidence": content = <EvidencePage language={language} />; break;
     case "offline": content = <OfflinePage language={language} />; break;

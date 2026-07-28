@@ -14,6 +14,7 @@ import {
 import { hashPassword, verifyPassword } from "@/app/lib/password";
 import { editableCollections, validateCollectionParity, validateContentRecord } from "@/app/lib/content-validation";
 import { ensureDatabase, writeAuditEvent } from "@/app/lib/database";
+import { deleteObject } from "@/app/lib/storage";
 import { buildSignedFeedRelease } from "@/app/lib/feed";
 import type { Update } from "@/app/lib/content";
 
@@ -37,17 +38,31 @@ function remoteIdentifier(request: NextRequest) {
   );
 }
 
+/**
+ * Both existing roles may moderate contributions today. Keeping the check in
+ * one place means introducing a narrower `reviewer` role later is a change here
+ * rather than a hunt through every call site.
+ */
+function canModerateContributions(user: { role: string }) {
+  return user.role === "admin" || user.role === "super_admin";
+}
+
 export async function GET(request: NextRequest) {
   try {
     const user = await getAdminSession(request);
     if (!user) return NextResponse.json({ authenticated: false });
     const db = await ensureDatabase();
-    const [volunteers, content, users, audits] = await Promise.all([
+    const [volunteers, contributions, content, users, audits] = await Promise.all([
       db.execute(`SELECT id, name, email, contact_platform, contact_handle,
                          skills_json, languages_json, availability,
                          note, language, status, internal_notes, consented_at,
                          created_at, updated_at, retention_eligible_at
                   FROM volunteer_submissions ORDER BY created_at DESC`),
+      db.execute(`SELECT id, kind, title, credit, body, language, storage_key,
+                         social_storage_key, mime_type, width, height, byte_size,
+                         status, internal_notes, decline_reason, created_at,
+                         updated_at, reviewed_by, reviewed_at
+                  FROM contributions ORDER BY created_at DESC`),
       db.execute(`SELECT id, collection, record_id, language, sort_order, draft_json,
                          published_json, version, published_at, updated_at
                   FROM content_entries ORDER BY collection, sort_order, created_at`),
@@ -83,6 +98,26 @@ export async function GET(request: NextRequest) {
         retentionEligibleAt: row.retention_eligible_at
           ? String(row.retention_eligible_at)
           : null,
+      })),
+      contributions: contributions.rows.map((row) => ({
+        id: String(row.id),
+        kind: String(row.kind),
+        title: String(row.title),
+        credit: String(row.credit),
+        body: String(row.body),
+        language: String(row.language),
+        storageKey: row.storage_key ? String(row.storage_key) : null,
+        socialStorageKey: row.social_storage_key ? String(row.social_storage_key) : null,
+        mimeType: row.mime_type ? String(row.mime_type) : null,
+        width: row.width === null ? null : Number(row.width),
+        height: row.height === null ? null : Number(row.height),
+        byteSize: row.byte_size === null ? null : Number(row.byte_size),
+        status: String(row.status),
+        internalNotes: String(row.internal_notes),
+        declineReason: row.decline_reason ? String(row.decline_reason) : null,
+        createdAt: String(row.created_at),
+        updatedAt: String(row.updated_at),
+        reviewedAt: row.reviewed_at ? String(row.reviewed_at) : null,
       })),
       content: content.rows.map((row) => ({
         id: String(row.id),
@@ -231,6 +266,90 @@ export async function POST(request: NextRequest) {
         args: [input.id],
       });
       await writeAuditEvent(user.id, "deleted", "volunteer", input.id);
+      return NextResponse.json({ ok: true });
+    }
+
+    if (body.action === "contribution_update") {
+      if (!canModerateContributions(user)) {
+        return NextResponse.json({ error: "Not permitted." }, { status: 403 });
+      }
+      const input = z
+        .object({
+          action: z.literal("contribution_update"),
+          id: z.string().uuid(),
+          status: z.enum(["pending", "approved", "declined", "withdrawn"]),
+          internalNotes: z.string().max(4000),
+          declineReason: z
+            .enum([
+              "off_topic",
+              "not_own_work",
+              "identifying_info",
+              "low_quality",
+              "duplicate",
+              "other",
+            ])
+            .nullable()
+            .default(null),
+        })
+        .parse(body);
+      if (input.status === "declined" && !input.declineReason) {
+        return NextResponse.json(
+          { error: "Choose a reason so the contributor knows why." },
+          { status: 400 },
+        );
+      }
+      const now = new Date();
+      const retention =
+        input.status === "declined" || input.status === "withdrawn"
+          ? new Date(now.getTime() + 180 * 24 * 60 * 60 * 1000).toISOString()
+          : null;
+      await db.execute({
+        sql: `UPDATE contributions
+              SET status = ?, internal_notes = ?, decline_reason = ?,
+                  reviewed_by = ?, reviewed_at = ?, updated_at = ?,
+                  retention_eligible_at = ?
+              WHERE id = ?`,
+        args: [
+          input.status,
+          input.internalNotes,
+          input.status === "declined" ? input.declineReason : null,
+          user.id,
+          now.toISOString(),
+          now.toISOString(),
+          retention,
+          input.id,
+        ],
+      });
+      await writeAuditEvent(user.id, "reviewed", "contribution", input.id, {
+        status: input.status,
+      });
+      return NextResponse.json({ ok: true });
+    }
+
+    if (body.action === "contribution_delete") {
+      if (!canModerateContributions(user)) {
+        return NextResponse.json({ error: "Not permitted." }, { status: 403 });
+      }
+      const input = z
+        .object({ action: z.literal("contribution_delete"), id: z.string().uuid() })
+        .parse(body);
+      const existing = await db.execute({
+        sql: "SELECT storage_key, social_storage_key FROM contributions WHERE id = ?",
+        args: [input.id],
+      });
+      // Remove the stored files alongside the row. An orphaned object is a
+      // poster the team believes it deleted and did not.
+      for (const key of [
+        existing.rows[0]?.storage_key,
+        existing.rows[0]?.social_storage_key,
+      ]) {
+        if (typeof key === "string" && key) await deleteObject(key);
+      }
+      await db.execute({
+        sql: "DELETE FROM contributions WHERE id = ?",
+        args: [input.id],
+      });
+      await writeAuditEvent(user.id, "deleted", "contribution", input.id);
       return NextResponse.json({ ok: true });
     }
 

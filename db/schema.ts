@@ -141,6 +141,53 @@ export const visitorTotals = sqliteTable("visitor_totals", {
   updatedAt: text("updated_at").notNull(),
 });
 
+export const contributions = sqliteTable(
+  "contributions",
+  {
+    id: text("id").primaryKey(),
+    kind: text("kind", { enum: ["image", "writing"] }).notNull(),
+    title: text("title").notNull(),
+    credit: text("credit").notNull().default(""),
+    body: text("body").notNull().default(""),
+    language: text("language", { enum: ["en", "hi"] }).notNull(),
+    storageKey: text("storage_key"),
+    socialStorageKey: text("social_storage_key"),
+    mimeType: text("mime_type"),
+    width: integer("width"),
+    height: integer("height"),
+    byteSize: integer("byte_size"),
+    status: text("status", {
+      enum: ["pending", "approved", "declined", "withdrawn"],
+    })
+      .notNull()
+      .default("pending"),
+    internalNotes: text("internal_notes").notNull().default(""),
+    contentFingerprint: text("content_fingerprint"),
+    declineReason: text("decline_reason", {
+      enum: [
+        "off_topic",
+        "not_own_work",
+        "identifying_info",
+        "low_quality",
+        "duplicate",
+        "other",
+      ],
+    }),
+    recoveryCodeHash: text("recovery_code_hash").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    reviewedBy: text("reviewed_by"),
+    reviewedAt: text("reviewed_at"),
+    retentionEligibleAt: text("retention_eligible_at"),
+  },
+  (table) => [
+    uniqueIndex("contributions_recovery_code_unique").on(table.recoveryCodeHash),
+    index("contributions_status_idx").on(table.status),
+    index("contributions_fingerprint_idx").on(table.contentFingerprint),
+    index("contributions_created_idx").on(table.createdAt),
+  ],
+);
+
 export const visitorDailyIdentifiers = sqliteTable(
   "visitor_daily_identifiers",
   {

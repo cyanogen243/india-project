@@ -75,6 +75,29 @@ export const migrationStatements = [
     created_at TEXT NOT NULL
   )`,
   "CREATE INDEX IF NOT EXISTS visitor_daily_date_idx ON visitor_daily_identifiers(visit_date)",
+  `CREATE TABLE IF NOT EXISTS contributions (
+    id TEXT PRIMARY KEY NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('image', 'writing')),
+    title TEXT NOT NULL, credit TEXT NOT NULL DEFAULT '',
+    body TEXT NOT NULL DEFAULT '',
+    language TEXT NOT NULL CHECK (language IN ('en', 'hi')),
+    storage_key TEXT, social_storage_key TEXT, mime_type TEXT,
+    width INTEGER, height INTEGER, byte_size INTEGER,
+    status TEXT NOT NULL DEFAULT 'pending'
+      CHECK (status IN ('pending', 'approved', 'declined', 'withdrawn')),
+    internal_notes TEXT NOT NULL DEFAULT '', content_fingerprint TEXT,
+    decline_reason TEXT CHECK (decline_reason IN
+      ('off_topic', 'not_own_work', 'identifying_info', 'low_quality', 'duplicate', 'other')),
+    recovery_code_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+    reviewed_by TEXT, reviewed_at TEXT, retention_eligible_at TEXT
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS contributions_recovery_code_unique
+    ON contributions(recovery_code_hash)`,
+  "CREATE INDEX IF NOT EXISTS contributions_status_idx ON contributions(status)",
+  `CREATE INDEX IF NOT EXISTS contributions_fingerprint_idx
+    ON contributions(content_fingerprint)`,
+  "CREATE INDEX IF NOT EXISTS contributions_created_idx ON contributions(created_at)",
 ];
 
 let client: Client | undefined;
@@ -165,6 +188,44 @@ export function seedContentBundle(): ContentBundle {
     resources: seededCollections.resources,
     landing: seededCollections.landing,
   };
+}
+
+export type PublicContribution = {
+  id: string;
+  kind: "image" | "writing";
+  title: string;
+  credit: string;
+  body: string;
+  language: string;
+  width: number | null;
+  height: number | null;
+  createdAt: string;
+};
+
+/**
+ * Only approved rows are ever returned here. Pending, declined and withdrawn
+ * work stays out of every public surface, and the recovery code hash is never
+ * part of the selection.
+ */
+export async function loadApprovedContributions(): Promise<PublicContribution[]> {
+  const db = await ensureDatabase();
+  const result = await db.execute(
+    `SELECT id, kind, title, credit, body, language, width, height, created_at
+     FROM contributions
+     WHERE status = 'approved'
+     ORDER BY created_at DESC`,
+  );
+  return result.rows.map((row) => ({
+    id: String(row.id),
+    kind: String(row.kind) as "image" | "writing",
+    title: String(row.title),
+    credit: String(row.credit),
+    body: String(row.body),
+    language: String(row.language),
+    width: row.width === null ? null : Number(row.width),
+    height: row.height === null ? null : Number(row.height),
+    createdAt: String(row.created_at),
+  }));
 }
 
 export async function loadPublishedContent(): Promise<ContentBundle> {

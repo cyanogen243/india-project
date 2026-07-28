@@ -2307,3 +2307,353 @@ footer p {
     width: 65%;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Contribution kit: submission form, recovery lookup, public gallery
+   --------------------------------------------------------------------------- */
+
+.contribute-form {
+  display: grid;
+  gap: 1.4rem;
+  padding: clamp(1.2rem, 4vw, 2rem);
+  border: 1px solid var(--ink);
+  background: #fffaf1;
+}
+
+.contribute-form label,
+.contribute-form legend {
+  display: grid;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.contribute-kind {
+  padding: 0;
+  border: 0;
+}
+
+.contribute-kind-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.8rem;
+  margin-top: 0.5rem;
+}
+
+.contribute-kind-card {
+  display: grid;
+  gap: 0.2rem;
+  padding: 1rem;
+  border: 2px solid var(--line);
+  background: white;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.contribute-kind-card:hover {
+  border-color: var(--ink);
+}
+
+.contribute-kind-card.selected {
+  border-color: var(--red);
+  background: var(--red-soft);
+}
+
+.contribute-kind-card input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.contribute-kind-card strong {
+  font-size: 0.95rem;
+}
+
+.contribute-kind-card small {
+  font-weight: 400;
+  color: var(--ink-soft);
+}
+
+.contribute-kind-card:focus-within {
+  outline: 3px solid var(--sun);
+  outline-offset: 2px;
+}
+
+.contribute-terms {
+  padding: 1rem 1.2rem;
+  border-left: 4px solid var(--sun);
+  background: var(--paper-deep);
+}
+
+.contribute-terms h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+}
+
+.contribute-terms ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.contribute-dropzone {
+  display: grid;
+  gap: 0.7rem;
+  justify-items: center;
+  padding: 1.6rem 1rem;
+  border: 2px dashed var(--line);
+  background: white;
+  text-align: center;
+}
+
+.contribute-dropzone.dragging {
+  border-color: var(--red);
+  background: var(--red-soft);
+}
+
+.contribute-dropzone.filled {
+  border-style: solid;
+}
+
+.contribute-dropzone small {
+  color: var(--ink-soft);
+}
+
+.contribute-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  justify-content: center;
+  text-align: left;
+}
+
+.contribute-preview img {
+  max-width: 180px;
+  height: auto;
+  border: 1px solid var(--ink);
+}
+
+.contribute-preview p {
+  margin: 0 0 0.3rem;
+  font-size: 0.85rem;
+  word-break: break-all;
+}
+
+.contribute-browse {
+  font-size: 0.85rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.contribute-browse input[type="file"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.contribute-browse:focus-within span {
+  outline: 3px solid var(--sun);
+  outline-offset: 2px;
+}
+
+.contribute-privacy {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  font-size: 0.88rem;
+  background: var(--paper-deep);
+}
+
+.contribute-receipt {
+  display: grid;
+  gap: 0.9rem;
+  padding: clamp(1.4rem, 5vw, 2.4rem);
+  border: 1px solid var(--ink);
+  background: #fffaf1;
+}
+
+.contribute-code-block {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  align-items: center;
+  padding: 1.2rem;
+  border: 2px solid var(--ink);
+  background: var(--sun);
+}
+
+.contribute-code-label {
+  width: 100%;
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.contribute-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: clamp(1.5rem, 6vw, 2.2rem);
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  word-break: break-all;
+}
+
+.contribute-warning {
+  margin: 0;
+  font-weight: 700;
+}
+
+/* Recovery code lookup */
+
+.lookup-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.lookup-form {
+  display: grid;
+  gap: 0.8rem;
+  padding: clamp(1.2rem, 4vw, 2rem);
+  border: 1px solid var(--ink);
+  background: #fffaf1;
+}
+
+.lookup-form label {
+  display: grid;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.lookup-code-input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 1.3rem;
+  letter-spacing: 0.25em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.lookup-result {
+  display: grid;
+  gap: 0.6rem;
+  justify-items: start;
+  padding: 1.2rem;
+  border: 1px solid var(--ink);
+  background: white;
+}
+
+/* Public gallery */
+
+.gallery-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.4rem;
+}
+
+.gallery-filter {
+  padding: 0.45rem 1rem;
+  border: 1px solid var(--ink);
+  background: white;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.gallery-filter.active {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1.2rem;
+}
+
+.gallery-card {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  border: 1px solid var(--ink);
+  background: white;
+  overflow: hidden;
+}
+
+.gallery-card img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-bottom: 1px solid var(--ink);
+}
+
+/* Writing has no thumbnail, so it is set as a typographic tile instead of
+   being demoted to a list. A poem laid out this way reads as a poster. */
+.gallery-writing {
+  display: grid;
+  align-content: start;
+  gap: 0.6rem;
+  padding: 1.4rem;
+  min-height: 220px;
+  border-bottom: 1px solid var(--ink);
+  color: var(--paper);
+}
+
+.gallery-writing h3 {
+  margin: 0;
+  font-size: 1.4rem;
+  line-height: 1.1;
+}
+
+.gallery-writing p {
+  margin: 0;
+  font-size: 0.9rem;
+  white-space: pre-wrap;
+  opacity: 0.92;
+}
+
+.gallery-meta {
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.9rem 1rem;
+}
+
+.gallery-meta h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.gallery-meta small {
+  color: var(--ink-soft);
+}
+
+.gallery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0 1rem 1rem;
+}
+
+.gallery-actions .button {
+  font-size: 0.78rem;
+  padding: 0.4rem 0.7rem;
+}
+
+.gallery-empty {
+  padding: 2.5rem 1rem;
+  text-align: center;
+  border: 1px dashed var(--line);
+  color: var(--ink-soft);
+}
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}

@@ -32,6 +32,25 @@ type Volunteer = {
   retentionEligibleAt: string | null;
 };
 
+type Contribution = {
+  id: string;
+  kind: "image" | "writing";
+  title: string;
+  credit: string;
+  body: string;
+  language: string;
+  storageKey: string | null;
+  socialStorageKey: string | null;
+  width: number | null;
+  height: number | null;
+  byteSize: number | null;
+  status: string;
+  internalNotes: string;
+  declineReason: string | null;
+  createdAt: string;
+  reviewedAt: string | null;
+};
+
 type ContentEntry = {
   id: string;
   collection: string;
@@ -49,6 +68,7 @@ type AdminData = {
   user: User;
   collections: string[];
   volunteers: Volunteer[];
+  contributions: Contribution[];
   content: ContentEntry[];
   users: User[];
   audits: {
@@ -65,6 +85,20 @@ function accountDisplayName(user: Pick<User, "displayName" | "role">) {
 }
 
 const statuses = ["new", "contacted", "accepted", "declined", "archived"];
+
+const contributionStatuses = ["pending", "approved", "declined", "withdrawn"];
+
+// Shown to the contributor when they enter their recovery code, so these are
+// worded to be read by the person whose work was declined. Internal notes stay
+// in the admin panel.
+const declineReasons: Record<string, string> = {
+  off_topic: "Not related to the movement",
+  not_own_work: "Appears to be someone else's work",
+  identifying_info: "Contains information that could identify people",
+  low_quality: "Resolution too low to be usable",
+  duplicate: "Already in the collection",
+  other: "Other",
+};
 
 const emptyTemplates: Record<string, Record<string, unknown>> = {
   updates: {
@@ -163,7 +197,9 @@ export function AdminApp() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [tab, setTab] = useState<"content" | "volunteers" | "users" | "audit">(
+  const [tab, setTab] = useState<
+    "content" | "volunteers" | "contributions" | "users" | "audit"
+  >(
     "content",
   );
   const [temporaryPassword, setTemporaryPassword] = useState("");
@@ -321,6 +357,9 @@ export function AdminApp() {
       <nav className="admin-tabs" aria-label="Admin sections">
         <button className={tab === "content" ? "active" : ""} onClick={() => setTab("content")}>Content</button>
         <button className={tab === "volunteers" ? "active" : ""} onClick={() => setTab("volunteers")}>Volunteers ({data.volunteers.length})</button>
+        <button className={tab === "contributions" ? "active" : ""} onClick={() => setTab("contributions")}>
+          Contributions ({data.contributions.filter((item) => item.status === "pending").length})
+        </button>
         {data.user.role === "super_admin" && (
           <button className={tab === "users" ? "active" : ""} onClick={() => setTab("users")}>Users</button>
         )}
@@ -349,6 +388,14 @@ export function AdminApp() {
       {tab === "volunteers" && (
         <VolunteerWorkspace
           volunteers={data.volunteers}
+          mutate={mutate}
+          setError={setError}
+          setNotice={setNotice}
+        />
+      )}
+      {tab === "contributions" && (
+        <ContributionWorkspace
+          contributions={data.contributions}
           mutate={mutate}
           setError={setError}
           setNotice={setNotice}
@@ -644,6 +691,142 @@ function VolunteerCard({
       <label>Internal notes<textarea rows={4} value={notes} onChange={(event) => setNotes(event.target.value)} /></label>
       {volunteer.retentionEligibleAt && <small>Cleanup eligible after {new Date(volunteer.retentionEligibleAt).toLocaleDateString()}</small>}
       <div className="admin-actions"><button className="button button-primary" onClick={() => void onSave(status, notes)}>Save</button><button className="button button-danger" onClick={() => void onDelete()}>Delete</button></div>
+    </article>
+  );
+}
+
+function ContributionWorkspace({
+  contributions,
+  mutate,
+  setError,
+  setNotice,
+}: {
+  contributions: Contribution[];
+  mutate: (body: Record<string, unknown>) => Promise<unknown>;
+  setError: (value: string) => void;
+  setNotice: (value: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("pending");
+  const filtered = contributions.filter(
+    (item) =>
+      (status === "all" || item.status === status) &&
+      `${item.title} ${item.credit} ${item.body}`
+        .toLowerCase()
+        .includes(query.toLowerCase()),
+  );
+  return (
+    <section className="admin-panel">
+      <div className="admin-panel-heading">
+        <div>
+          <p className="eyebrow">Nothing is public until approved</p>
+          <h2>Contributions</h2>
+        </div>
+        <div className="admin-actions">
+          <input aria-label="Search contributions" placeholder="Search" value={query} onChange={(event) => setQuery(event.target.value)} />
+          <select aria-label="Filter by status" value={status} onChange={(event) => setStatus(event.target.value)}>
+            <option value="all">All statuses</option>
+            {contributionStatuses.map((item) => <option key={item}>{item}</option>)}
+          </select>
+        </div>
+      </div>
+      <div className="volunteer-admin-grid">
+        {filtered.map((contribution) => (
+          <ContributionCard
+            key={`${contribution.id}-${contribution.status}`}
+            contribution={contribution}
+            onSave={async (nextStatus, internalNotes, declineReason) => {
+              try {
+                await mutate({
+                  action: "contribution_update",
+                  id: contribution.id,
+                  status: nextStatus,
+                  internalNotes,
+                  declineReason,
+                });
+                setNotice("Contribution updated.");
+              } catch (caught) {
+                setError(caught instanceof Error ? caught.message : "Unable to update");
+              }
+            }}
+            onDelete={async () => {
+              if (!window.confirm("Permanently delete this contribution and its files?")) return;
+              await mutate({ action: "contribution_delete", id: contribution.id });
+              setNotice("Contribution deleted.");
+            }}
+          />
+        ))}
+        {filtered.length === 0 && <p>Nothing here right now.</p>}
+      </div>
+    </section>
+  );
+}
+
+function ContributionCard({
+  contribution,
+  onSave,
+  onDelete,
+}: {
+  contribution: Contribution;
+  onSave: (status: string, notes: string, declineReason: string | null) => Promise<void>;
+  onDelete: () => Promise<void>;
+}) {
+  const [status, setStatus] = useState(contribution.status);
+  const [notes, setNotes] = useState(contribution.internalNotes);
+  const [reason, setReason] = useState(contribution.declineReason ?? "off_topic");
+  return (
+    <article className="volunteer-admin-card">
+      <div>
+        <span className={`badge badge-${status}`}>{status}</span>
+        <small>{new Date(contribution.createdAt).toLocaleString()}</small>
+      </div>
+      <h3>{contribution.title}</h3>
+      <p><strong>Credit:</strong> {contribution.credit || "Not given"}</p>
+      {contribution.kind === "image" && contribution.storageKey && (
+        <Image
+          src={`/api/contributions/${contribution.id}/file?variant=social`}
+          alt={contribution.title}
+          width={320}
+          height={400}
+          unoptimized
+          style={{ width: "100%", height: "auto", borderRadius: "0.5rem" }}
+        />
+      )}
+      {contribution.kind === "writing" && (
+        <p style={{ whiteSpace: "pre-wrap" }}>{contribution.body}</p>
+      )}
+      {contribution.width && contribution.height && (
+        <small>{contribution.width} × {contribution.height} px</small>
+      )}
+      <label>
+        Status
+        <select value={status} onChange={(event) => setStatus(event.target.value)}>
+          {contributionStatuses.map((item) => <option key={item}>{item}</option>)}
+        </select>
+      </label>
+      {status === "declined" && (
+        <label>
+          Reason shown to the contributor
+          <select value={reason} onChange={(event) => setReason(event.target.value)}>
+            {Object.entries(declineReasons).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+        </label>
+      )}
+      <label>
+        Internal notes (never shown to the contributor)
+        <textarea rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} />
+      </label>
+      <div className="admin-actions">
+        <button
+          className="button button-primary"
+          onClick={() => void onSave(status, notes, status === "declined" ? reason : null)}
+        >
+          Save
+        </button>
+        <button className="button button-danger" onClick={() => void onDelete()}>Delete</button>
+      </div>
     </article>
   );
 }

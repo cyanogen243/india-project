@@ -28,6 +28,15 @@ const nextConfig: NextConfig = {
         headers: [{ key: "Cache-Control", value: "private, no-store, max-age=0" }],
       },
       {
+        // Contributor files are re-encoded by us and served with a known type,
+        // but they are still the one response body originating from an
+        // untrusted source. Nothing on this route needs to load anything.
+        source: "/api/contributions/:id/file",
+        headers: [
+          { key: "Content-Security-Policy", value: "default-src 'none'; sandbox" },
+        ],
+      },
+      {
         source: "/admin/:path*",
         headers: [{ key: "Cache-Control", value: "private, no-store, max-age=0" }],
       },

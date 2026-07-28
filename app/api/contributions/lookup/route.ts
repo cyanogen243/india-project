@@ -1,0 +1,100 @@
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { consumeRateLimit, ensureDatabase, writeAuditEvent } from "@/app/lib/database";
+import { hashRecoveryCode, normalizeRecoveryCode } from "@/app/lib/contributions";
+import { deleteObject } from "@/app/lib/storage";
+
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+const lookupSchema = z.object({
+  code: z.string().trim().min(4).max(32),
+  action: z.enum(["status", "withdraw"]).default("status"),
+});
+
+function remoteIdentifier(request: NextRequest) {
+  return (
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    request.headers.get("cf-connecting-ip") ||
+    "unknown"
+  );
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const input = lookupSchema.parse(await request.json());
+
+    // Codes are the only credential guarding a submission, so this endpoint is
+    // the enumeration surface. The limit is far tighter than the upload route.
+    const allowed = await consumeRateLimit(
+      "contribution-lookup",
+      remoteIdentifier(request),
+      10,
+      15 * 60 * 1000,
+    );
+    if (!allowed) {
+      return NextResponse.json(
+        { error: "Too many attempts. Please try again later." },
+        { status: 429 },
+      );
+    }
+
+    const db = await ensureDatabase();
+    const result = await db.execute({
+      sql: `SELECT id, kind, title, status, decline_reason, storage_key,
+                   social_storage_key, created_at, updated_at
+            FROM contributions WHERE recovery_code_hash = ?`,
+      args: [hashRecoveryCode(normalizeRecoveryCode(input.code))],
+    });
+    const row = result.rows[0];
+    if (!row) {
+      return NextResponse.json({ error: "No submission found for that code." }, { status: 404 });
+    }
+
+    if (input.action === "withdraw") {
+      if (row.status === "withdrawn") {
+        return NextResponse.json({ error: "That submission is already withdrawn." }, { status: 409 });
+      }
+      // Withdrawal is the contributor's decision and takes effect immediately.
+      // The stored files go with it, otherwise a "removed" poster stays
+      // downloadable to anyone still holding its URL.
+      for (const key of [row.storage_key, row.social_storage_key]) {
+        if (typeof key === "string" && key) await deleteObject(key);
+      }
+      const now = new Date();
+      await db.execute({
+        sql: `UPDATE contributions
+              SET status = 'withdrawn', storage_key = NULL, social_storage_key = NULL,
+                  updated_at = ?, retention_eligible_at = ?
+              WHERE id = ?`,
+        args: [
+          now.toISOString(),
+          new Date(now.getTime() + 180 * 24 * 60 * 60 * 1000).toISOString(),
+          row.id,
+        ],
+      });
+      await writeAuditEvent(null, "withdrawn", "contribution", String(row.id), {});
+      return NextResponse.json({ ok: true, status: "withdrawn" });
+    }
+
+    // Fields are listed explicitly rather than spreading the row: internal_notes
+    // is written for other moderators and must never reach the contributor.
+    return NextResponse.json({
+      ok: true,
+      submission: {
+        kind: row.kind,
+        title: row.title,
+        status: row.status,
+        declineReason: row.decline_reason ?? null,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      },
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: "Enter the code you were given." }, { status: 400 });
+    }
+    const message = error instanceof Error ? error.message : "Unable to look that up.";
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
+}
