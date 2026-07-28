@@ -1644,6 +1644,12 @@ footer p {
   gap: 1rem;
 }
 
+.field-hint {
+  margin: -0.3rem 0 0.8rem;
+  font-size: 0.9rem;
+  opacity: 0.75;
+}
+
 .volunteer-form label,
 .admin-shell label,
 .volunteer-form legend {
@@ -1940,6 +1946,15 @@ footer p {
 .volunteer-admin-card > div:first-child {
   display: flex;
   justify-content: space-between;
+}
+
+.volunteer-team {
+  justify-self: start;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  border: 1px solid var(--line);
+  background: #f6f1e6;
 }
 
 .admin-create-user {

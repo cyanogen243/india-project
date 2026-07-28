@@ -3,6 +3,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import {
+  volunteerCapabilities,
+  volunteerCapabilityLabel,
+  volunteerTeamLabel,
+  volunteerTeams,
+} from "@/app/lib/volunteers";
 
 type User = {
   id: string;
@@ -21,6 +27,8 @@ type Volunteer = {
   email: string;
   contactPlatform: "whatsapp" | "telegram" | "discord";
   contactHandle: string;
+  city: string;
+  team: string;
   skills: string[];
   languages: string[];
   availability: string;
@@ -66,14 +74,6 @@ function accountDisplayName(user: Pick<User, "displayName" | "role">) {
 
 const statuses = ["new", "contacted", "accepted", "declined", "archived"];
 const contactPlatforms = ["whatsapp", "telegram", "discord"];
-const skillFilterOptions: [string, string][] = [
-  ["translation", "Translation"],
-  ["source-review", "Source and timestamp review"],
-  ["accessibility", "Accessibility and low-bandwidth support"],
-  ["editorial", "Editorial support"],
-  ["technical", "Technical"],
-  ["tech-team", "Join the tech team"],
-];
 
 const emptyTemplates: Record<string, Record<string, unknown>> = {
   updates: {
@@ -585,6 +585,8 @@ function VolunteerWorkspace({
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [platform, setPlatform] = useState("all");
+  const [team, setTeam] = useState("all");
+  const [city, setCity] = useState("all");
   const [skill, setSkill] = useState("all");
   const [spokenLanguage, setSpokenLanguage] = useState("all");
   const [formLanguage, setFormLanguage] = useState("all");
@@ -598,16 +600,44 @@ function VolunteerWorkspace({
     [volunteers],
   );
 
+  const cityOptions = useMemo(
+    () =>
+      Array.from(new Set(volunteers.map((item) => item.city)))
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b)),
+    [volunteers],
+  );
+
+  // Derived rather than fixed so that records captured under an older
+  // capability list stay filterable after the list changes.
+  const skillOptions = useMemo(() => {
+    const present = new Set(volunteers.flatMap((item) => item.skills));
+    const known = volunteerCapabilities.filter((item) => present.has(item));
+    const legacy = Array.from(present)
+      .filter((item) => !volunteerCapabilities.includes(item as never))
+      .sort((a, b) => a.localeCompare(b));
+    return [...known, ...legacy];
+  }, [volunteers]);
+
+  // Teams are assigned in review, not asked for on the public form, so the
+  // filter stays hidden until at least one record has been bucketed.
+  const teamsAssigned = useMemo(
+    () => volunteers.some((item) => item.team),
+    [volunteers],
+  );
+
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
     const matches = volunteers.filter((item) => {
       if (status !== "all" && item.status !== status) return false;
       if (platform !== "all" && item.contactPlatform !== platform) return false;
+      if (team !== "all" && item.team !== team) return false;
+      if (city !== "all" && item.city !== city) return false;
       if (skill !== "all" && !item.skills.includes(skill)) return false;
       if (spokenLanguage !== "all" && !item.languages.includes(spokenLanguage)) return false;
       if (formLanguage !== "all" && item.language !== formLanguage) return false;
       if (!needle) return true;
-      return `${item.name} ${item.email} ${item.contactHandle} ${item.availability} ${item.note} ${item.internalNotes} ${item.languages.join(" ")} ${item.skills.join(" ")}`
+      return `${item.name} ${item.email} ${item.contactHandle} ${item.city} ${item.team} ${item.availability} ${item.note} ${item.internalNotes} ${item.languages.join(" ")} ${item.skills.join(" ")}`
         .toLowerCase()
         .includes(needle);
     });
@@ -619,21 +649,27 @@ function VolunteerWorkspace({
       "name-desc": (a, b) => text(b.name).localeCompare(text(a.name)),
       "email-asc": (a, b) => text(a.email).localeCompare(text(b.email)),
       "email-desc": (a, b) => text(b.email).localeCompare(text(a.email)),
+      "city-asc": (a, b) => text(a.city).localeCompare(text(b.city)),
+      "team-asc": (a, b) => volunteerTeams.indexOf(a.team as never) - volunteerTeams.indexOf(b.team as never),
       "availability-asc": (a, b) => text(a.availability).localeCompare(text(b.availability)),
       "platform-asc": (a, b) => text(a.contactPlatform).localeCompare(text(b.contactPlatform)),
       status: (a, b) => statuses.indexOf(a.status) - statuses.indexOf(b.status),
     };
     return [...matches].sort(compare[sort] ?? compare.newest);
-  }, [volunteers, query, status, platform, skill, spokenLanguage, formLanguage, sort]);
+  }, [volunteers, query, status, platform, team, city, skill, spokenLanguage, formLanguage, sort]);
 
   const activeFilters =
     (query.trim() ? 1 : 0) +
-    [status, platform, skill, spokenLanguage, formLanguage].filter((value) => value !== "all").length;
+    [status, platform, team, city, skill, spokenLanguage, formLanguage].filter(
+      (value) => value !== "all",
+    ).length;
 
   function clearFilters() {
     setQuery("");
     setStatus("all");
     setPlatform("all");
+    setTeam("all");
+    setCity("all");
     setSkill("all");
     setSpokenLanguage("all");
     setFormLanguage("all");
@@ -654,16 +690,30 @@ function VolunteerWorkspace({
             {statuses.map((item) => <option key={item}>{item}</option>)}
           </select>
         </label>
+        {teamsAssigned && (
+          <label>Team
+            <select value={team} onChange={(event) => setTeam(event.target.value)}>
+              <option value="all">All teams</option>
+              {volunteerTeams.map((item) => <option key={item} value={item}>{volunteerTeamLabel(item)}</option>)}
+            </select>
+          </label>
+        )}
+        <label>City
+          <select value={city} onChange={(event) => setCity(event.target.value)}>
+            <option value="all">All cities</option>
+            {cityOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
+        </label>
         <label>Platform
           <select value={platform} onChange={(event) => setPlatform(event.target.value)}>
             <option value="all">All platforms</option>
             {contactPlatforms.map((item) => <option key={item} value={item}>{item}</option>)}
           </select>
         </label>
-        <label>Skill
+        <label>Can help with
           <select value={skill} onChange={(event) => setSkill(event.target.value)}>
-            <option value="all">All skills</option>
-            {skillFilterOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            <option value="all">Anything</option>
+            {skillOptions.map((item) => <option key={item} value={item}>{volunteerCapabilityLabel(item)}</option>)}
           </select>
         </label>
         <label>Language
@@ -687,6 +737,8 @@ function VolunteerWorkspace({
             <option value="name-desc">Name Z–A</option>
             <option value="email-asc">Email A–Z</option>
             <option value="email-desc">Email Z–A</option>
+            <option value="city-asc">City A–Z</option>
+            {teamsAssigned && <option value="team-asc">Team</option>}
             <option value="availability-asc">Availability A–Z</option>
             <option value="platform-asc">Platform A–Z</option>
             <option value="status">Status pipeline</option>
@@ -743,9 +795,11 @@ function VolunteerCard({
     <article className="volunteer-admin-card">
       <div><span className={`badge badge-${status}`}>{status}</span><small>{new Date(volunteer.createdAt).toLocaleString()}</small></div>
       <h3>{volunteer.name}</h3>
+      {volunteer.team && <p className="volunteer-team">{volunteerTeamLabel(volunteer.team)}</p>}
       <a href={`mailto:${volunteer.email}`}>{volunteer.email}</a>
+      <p><strong>City:</strong> {volunteer.city || "Not provided"}</p>
       <p><strong>{volunteer.contactPlatform}:</strong> {volunteer.contactHandle || "Not provided"}</p>
-      <p><strong>Skills:</strong> {volunteer.skills.join(", ")}</p>
+      <p><strong>Can help with:</strong> {volunteer.skills.map((item) => volunteerCapabilityLabel(item)).join(", ")}</p>
       <p><strong>Languages:</strong> {volunteer.languages.join(", ")}</p>
       <p><strong>Availability:</strong> {volunteer.availability}</p>
       <p>{volunteer.note}</p>

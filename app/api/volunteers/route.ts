@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { consumeRateLimit, ensureDatabase, writeAuditEvent } from "@/app/lib/database";
+import { volunteerCapabilities } from "@/app/lib/volunteers";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,8 @@ const volunteerSchema = z.object({
   email: z.string().trim().email().max(240),
   contactPlatform: z.enum(["whatsapp", "telegram", "discord"]),
   contactHandle: z.string().trim().min(2).max(100).regex(/^[^\r\n<>]+$/),
-  skills: z.array(z.enum(["translation", "source-review", "accessibility", "editorial", "technical", "tech-team"])).min(1).max(5),
+  city: z.string().trim().min(2).max(80).regex(/^[^\r\n<>]+$/),
+  skills: z.array(z.enum(volunteerCapabilities)).min(1).max(volunteerCapabilities.length),
   languages: z.array(z.string().trim().min(2).max(40)).min(1).max(8),
   availability: z.string().trim().min(2).max(160),
   note: z.string().trim().min(20).max(1500),
@@ -27,6 +29,7 @@ function validationResponse(error: z.ZodError) {
     email: "Enter a valid email address.",
     contactPlatform: "Choose WhatsApp, Telegram, or Discord.",
     contactHandle: "Handle or username must be between 2 and 100 characters.",
+    city: "City must be between 2 and 80 characters.",
     skills: "Select at least one way you can help.",
     languages: "Enter at least one language, using 2 to 40 characters for each.",
     availability: "Availability must be between 2 and 160 characters.",
@@ -69,16 +72,17 @@ export async function POST(request: NextRequest) {
     const id = randomUUID();
     await db.execute({
       sql: `INSERT INTO volunteer_submissions
-        (id, name, email, contact_platform, contact_handle,
+        (id, name, email, contact_platform, contact_handle, city,
          skills_json, languages_json, availability, note,
          language, status, internal_notes, consented_at, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', '', ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', '', ?, ?, ?)`,
       args: [
         id,
         body.name,
         body.email.toLowerCase(),
         body.contactPlatform,
         body.contactHandle,
+        body.city,
         JSON.stringify(body.skills),
         JSON.stringify(body.languages),
         body.availability,

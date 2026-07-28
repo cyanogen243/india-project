@@ -32,6 +32,7 @@ export const migrationStatements = [
   `CREATE TABLE IF NOT EXISTS volunteer_submissions (
     id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, email TEXT NOT NULL,
     contact_platform TEXT NOT NULL DEFAULT 'telegram', contact_handle TEXT NOT NULL DEFAULT '',
+    city TEXT NOT NULL DEFAULT '', team TEXT NOT NULL DEFAULT '',
     skills_json TEXT NOT NULL, languages_json TEXT NOT NULL, availability TEXT NOT NULL,
     note TEXT NOT NULL, language TEXT NOT NULL CHECK (language IN ('en', 'hi')),
     status TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new', 'contacted', 'accepted', 'declined', 'archived')),
@@ -102,7 +103,7 @@ export async function ensureDatabase() {
       for (const sql of migrationStatements) {
         await db.execute(sql);
       }
-      await ensureVolunteerContactColumns(db);
+      await ensureVolunteerColumns(db);
       await seedContent(db);
       return db;
     })().catch((error) => {
@@ -113,19 +114,26 @@ export async function ensureDatabase() {
   return ready;
 }
 
-async function ensureVolunteerContactColumns(db: Client) {
+async function ensureVolunteerColumns(db: Client) {
   const columns = await db.execute("PRAGMA table_info(volunteer_submissions)");
   const names = new Set(columns.rows.map((row) => String(row.name)));
-  if (!names.has("contact_platform")) {
+  const additions: [string, string][] = [
+    ["contact_platform", "TEXT NOT NULL DEFAULT 'telegram'"],
+    ["contact_handle", "TEXT NOT NULL DEFAULT ''"],
+    ["city", "TEXT NOT NULL DEFAULT ''"],
+    ["team", "TEXT NOT NULL DEFAULT ''"],
+  ];
+  for (const [column, definition] of additions) {
+    if (names.has(column)) continue;
     await db.execute(
-      "ALTER TABLE volunteer_submissions ADD COLUMN contact_platform TEXT NOT NULL DEFAULT 'telegram'",
+      `ALTER TABLE volunteer_submissions ADD COLUMN ${column} ${definition}`,
     );
   }
-  if (!names.has("contact_handle")) {
-    await db.execute(
-      "ALTER TABLE volunteer_submissions ADD COLUMN contact_handle TEXT NOT NULL DEFAULT ''",
-    );
-  }
+  // Indexed here rather than in migrationStatements so that the column exists
+  // first on databases created before the team field was introduced.
+  await db.execute(
+    "CREATE INDEX IF NOT EXISTS volunteers_team_idx ON volunteer_submissions(team)",
+  );
 }
 
 async function seedContent(db: Client) {

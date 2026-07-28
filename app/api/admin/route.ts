@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
     const db = await ensureDatabase();
     const [volunteers, content, users, audits] = await Promise.all([
       db.execute(`SELECT id, name, email, contact_platform, contact_handle,
-                         skills_json, languages_json, availability,
+                         city, team, skills_json, languages_json, availability,
                          note, language, status, internal_notes, consented_at,
                          created_at, updated_at, retention_eligible_at
                   FROM volunteer_submissions ORDER BY created_at DESC`),
@@ -70,6 +70,8 @@ export async function GET(request: NextRequest) {
         email: String(row.email),
         contactPlatform: String(row.contact_platform),
         contactHandle: String(row.contact_handle),
+        city: String(row.city ?? ""),
+        team: String(row.team ?? ""),
         skills: JSON.parse(String(row.skills_json)),
         languages: JSON.parse(String(row.languages_json)),
         availability: String(row.availability),
