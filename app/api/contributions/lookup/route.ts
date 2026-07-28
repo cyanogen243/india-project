@@ -82,6 +82,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       ok: true,
       submission: {
+        // Only approved work carries its id, so a contributor can open the
+        // page their work now lives on. A pending id would be a public handle
+        // to something still under review.
+        id: row.status === "approved" ? row.id : null,
         kind: row.kind,
         title: row.title,
         status: row.status,

@@ -4,7 +4,9 @@ import { useState } from "react";
 import type { Language } from "@/app/lib/content";
 
 type Submission = {
-  kind: "image" | "writing";
+  // Present only once the work is approved and therefore public.
+  id: string | null;
+  kind: "poster" | "image" | "poem" | "essay";
   title: string;
   status: string;
   declineReason: string | null;
@@ -106,6 +108,22 @@ export function RecoveryCodeLookup({ language }: { language: Language }) {
               {statusLabels[submission.status]?.[hindi ? "hi" : "en"] ?? submission.status}
             </span>
           </p>
+          {submission.status === "approved" && (
+            <p>
+              {/* Only poems and essays have a page of their own; a poster or
+                  image lives on the wall itself. */}
+              <a
+                className="text-link"
+                href={
+                  submission.id && (submission.kind === "poem" || submission.kind === "essay")
+                    ? `${hindi ? "/hi/art" : "/art"}/${submission.id}`
+                    : hindi ? "/hi/art" : "/art"
+                }
+              >
+                {hindi ? "दीवार पर देखें →" : "See it on the wall →"}
+              </a>
+            </p>
+          )}
           {submission.status === "declined" && submission.declineReason && (
             <p>
               <strong>{hindi ? "कारण: " : "Reason: "}</strong>
