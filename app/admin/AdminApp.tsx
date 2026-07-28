@@ -418,7 +418,7 @@ export function AdminApp() {
               <tbody>
                 {data.audits.map((event) => (
                   <tr key={event.id}>
-                    <td>{new Date(event.createdAt).toLocaleString()}</td>
+                    <td>{new Date(event.createdAt).toLocaleString("en-IN")}</td>
                     <td>{event.action}</td>
                     <td>{event.entityType}</td>
                     <td>{event.entityId ?? "—"}</td>
@@ -559,7 +559,7 @@ function StructuredRecordEditor({
   return (
     <details className="admin-record" open={!entryId}>
       <summary>
-        <span><strong>{String(draft.title ?? draft.text ?? draft.id)}</strong><small>{String(draft.language)} · {publishedAt ? `published ${new Date(publishedAt).toLocaleString()}` : "draft only"}</small></span>
+        <span><strong>{String(draft.title ?? draft.text ?? draft.id)}</strong><small>{String(draft.language)} · {publishedAt ? `published ${new Date(publishedAt).toLocaleString("en-IN")}` : "draft only"}</small></span>
         <span>{collection}</span>
       </summary>
       <div className="structured-editor">
@@ -684,7 +684,7 @@ function VolunteerCard({
   const [notes, setNotes] = useState(volunteer.internalNotes);
   return (
     <article className="volunteer-admin-card">
-      <div><span className={`badge badge-${status}`}>{status}</span><small>{new Date(volunteer.createdAt).toLocaleString()}</small></div>
+      <div><span className={`badge badge-${status}`}>{status}</span><small>{new Date(volunteer.createdAt).toLocaleString("en-IN")}</small></div>
       <h3>{volunteer.name}</h3>
       <a href={`mailto:${volunteer.email}`}>{volunteer.email}</a>
       <p><strong>{volunteer.contactPlatform}:</strong> {volunteer.contactHandle || "Not provided"}</p>
@@ -694,7 +694,7 @@ function VolunteerCard({
       <p>{volunteer.note}</p>
       <label>Status<select value={status} onChange={(event) => setStatus(event.target.value)}>{statuses.map((item) => <option key={item}>{item}</option>)}</select></label>
       <label>Internal notes<textarea rows={4} value={notes} onChange={(event) => setNotes(event.target.value)} /></label>
-      {volunteer.retentionEligibleAt && <small>Cleanup eligible after {new Date(volunteer.retentionEligibleAt).toLocaleDateString()}</small>}
+      {volunteer.retentionEligibleAt && <small>Cleanup eligible after {new Date(volunteer.retentionEligibleAt).toLocaleDateString("en-IN")}</small>}
       <div className="admin-actions"><button className="button button-primary" onClick={() => void onSave(status, notes)}>Save</button><button className="button button-danger" onClick={() => void onDelete()}>Delete</button></div>
     </article>
   );
@@ -807,7 +807,7 @@ function ContributionCard({
     <article className="volunteer-admin-card">
       <div>
         <span className={`badge badge-${status}`}>{status}</span>
-        <small>{new Date(contribution.createdAt).toLocaleString()}</small>
+        <small>{new Date(contribution.createdAt).toLocaleString("en-IN")}</small>
       </div>
       <p>
         <strong>{contribution.kind}</strong>
@@ -994,7 +994,7 @@ function UserWorkspace({
                 </td>
                 <td>{user.role.replace("_", " ")}</td>
                 <td>{user.active ? "active" : "disabled"}{user.mustChangePassword ? " · password change required" : ""}</td>
-                <td>{user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString() : "Never"}</td>
+                <td>{user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString("en-IN") : "Never"}</td>
                 <td><div className="admin-actions"><button className="button" onClick={async () => { try { await mutate({ action: "user_reset_password", id: user.id }); setNotice("Password reset. Copy the one-time password."); } catch (caught) { setError(caught instanceof Error ? caught.message : "Reset failed"); } }}>Reset password</button><button className="button" onClick={async () => { try { await mutate({ action: "user_set_active", id: user.id, active: !user.active }); } catch (caught) { setError(caught instanceof Error ? caught.message : "Update failed"); } }}>{user.active ? "Disable" : "Enable"}</button></div></td>
               </tr>
             ))}
