@@ -2551,6 +2551,8 @@ footer p {
    small captions, licence stated once above the wall rather than per card. */
 
 .gallery-toolbar {
+  border-top: 2px solid var(--ink);
+  padding-top: 1.1rem;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -2676,10 +2678,7 @@ footer p {
   flex-wrap: wrap;
   align-items: center;
   gap: 1rem;
-  margin: 1.6rem 0 2rem;
-  padding: 1.1rem 1.2rem;
-  border: 1px solid var(--ink);
-  background: var(--paper-deep);
+  margin: 1.4rem 0 1.8rem;
 }
 
 .gallery-cta p {
@@ -2748,8 +2747,10 @@ footer p {
 
 .gallery-tile h3 {
   margin: 0;
-  font-size: 1.35rem;
+  font-size: 1.5rem;
   line-height: 1.1;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
 .tile-sub {
@@ -2794,8 +2795,10 @@ footer p {
 
 .gallery-essay h3 {
   margin: 0;
-  font-size: 1.35rem;
+  font-size: 1.5rem;
   line-height: 1.1;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
 .gallery-essay .tile-sub {
