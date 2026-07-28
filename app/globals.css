@@ -1920,11 +1920,17 @@ footer p {
   padding: 1rem;
   border: 1px solid var(--line);
   background: white;
+  /* Cards sit in equal-height rows; without this a short card beside a tall
+     one (an image beside an essay) spaces its rows across the extra height. */
+  align-content: start;
 }
 
 .volunteer-admin-card > div:first-child {
   display: flex;
   justify-content: space-between;
+  /* Baseline, not the default stretch — a stretched status badge with its
+     999px radius balloons into a circle. */
+  align-items: baseline;
 }
 
 .admin-create-user {
