@@ -20,6 +20,18 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: process.cwd(),
   },
+  async rewrites() {
+    // In dev, /sw.js must serve the self-destruct worker (public/sw-dev.js):
+    // a cache-first worker left by an old session pins its tab to stale
+    // HTML/CSS/JS, and the update check is the only request that reaches the
+    // browser past that worker. beforeFiles is required to shadow public/.
+    if (process.env.NODE_ENV !== "development") return [];
+    return {
+      beforeFiles: [{ source: "/sw.js", destination: "/sw-dev.js" }],
+      afterFiles: [],
+      fallback: [],
+    };
+  },
   async headers() {
     return [
       { source: "/(.*)", headers: securityHeaders },
