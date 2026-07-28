@@ -490,15 +490,15 @@ async function ArtPage({ language }: { language: Language }) {
   const items = await loadApprovedContributions();
   return (
     <>
-      <PageHeader
-        language={language}
-        kind="art"
-        intro={
-          hindi
-            ? "आंदोलन के लिए बनाए गए पोस्टर, कलाकृति और लेखन। मुफ़्त डाउनलोड करें, छापें और साझा करें।"
-            : "Posters, artwork and writing made for the movement. Free to download, print and share."
-        }
-      />
+      <header className="art-masthead">
+        <p className="eyebrow">{hindi ? "खुला संग्रह" : "Open collection"}</p>
+        <h1>{hindi ? "कला और लेखन" : "Art & Writing"}</h1>
+        <p className="dek">
+          {hindi
+            ? "आंदोलन के लिए बनाए गए पोस्टर, कलाकृति और शब्द। मुफ़्त डाउनलोड करें, छापें और साझा करें — कहीं भी।"
+            : "Posters, artwork and words made for the movement. Free to download, print and share — anywhere."}
+        </p>
+      </header>
       <div className="gallery-cta">
         <Link className="button button-primary" href={hindi ? "/hi/contribute" : "/contribute"}>
           {hindi ? "अपना काम साझा करें" : "Share your own work"}
