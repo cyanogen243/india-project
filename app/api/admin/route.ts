@@ -59,7 +59,8 @@ export async function GET(request: NextRequest) {
                          created_at, updated_at, retention_eligible_at
                   FROM volunteer_submissions ORDER BY created_at DESC`),
       db.execute(`SELECT id, kind, title, subtitle, credit, credit_account, body,
-                         language, storage_key, social_storage_key, mime_type,
+                         language, provenance, source_url, placeholder,
+                         storage_key, social_storage_key, mime_type,
                          width, height, byte_size, status, internal_notes, seeded,
                          decline_reason, created_at, updated_at, reviewed_by, reviewed_at
                   FROM contributions ORDER BY created_at DESC`),
@@ -109,6 +110,9 @@ export async function GET(request: NextRequest) {
         seeded: Number(row.seeded) === 1,
         body: String(row.body),
         language: String(row.language),
+        provenance: String(row.provenance ?? "own"),
+        sourceUrl: String(row.source_url ?? ""),
+        placeholder: Number(row.placeholder ?? 0) === 1,
         storageKey: row.storage_key ? String(row.storage_key) : null,
         socialStorageKey: row.social_storage_key ? String(row.social_storage_key) : null,
         mimeType: row.mime_type ? String(row.mime_type) : null,
@@ -307,14 +311,28 @@ export async function POST(request: NextRequest) {
         );
       }
       const existing = await db.execute({
-        sql: `SELECT kind, status, seeded, title, subtitle, credit,
-                     credit_account, body FROM contributions WHERE id = ?`,
+        sql: `SELECT kind, status, title, subtitle, credit, credit_account,
+                     body, storage_key, provenance FROM contributions WHERE id = ?`,
         args: [input.id],
       });
       const previous = existing.rows[0];
       if (!previous) {
         return NextResponse.json({ error: "Contribution not found." }, { status: 404 });
       }
+      // Withdrawal and the retention sweep both delete the stored objects and
+      // null the keys. Approving such a row again would put a permanently
+      // broken card on the wall and republish work its contributor took down.
+      const isFileKind = previous.kind === "poster" || previous.kind === "image";
+      if (input.status === "approved" && isFileKind && !previous.storage_key) {
+        return NextResponse.json(
+          {
+            error:
+              "This work's files were deleted when it was withdrawn or purged, so it cannot be published again.",
+          },
+          { status: 409 },
+        );
+      }
+
       const now = new Date();
       const retention =
         input.status === "declined" || input.status === "withdrawn"

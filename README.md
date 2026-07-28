@@ -70,6 +70,11 @@ For hosted Turso/libSQL, set:
 LIBSQL_URL=libsql://your-database.turso.io
 LIBSQL_AUTH_TOKEN=...
 SESSION_SECRET=...
+ART_S3_ENDPOINT=          # object storage for gallery images (any S3-compatible bucket)
+ART_S3_BUCKET=
+ART_S3_ACCESS_KEY_ID=
+ART_S3_SECRET_ACCESS_KEY=
+ART_S3_REGION=            # optional, defaults to "auto"
 RATE_LIMIT_SECRET=...
 FEED_SIGNING_PRIVATE_KEY=...
 NEXT_PUBLIC_SITE_URL=https://your-domain.example
@@ -150,6 +155,14 @@ Regenerate app icons from the approved primary mark with:
 ```sh
 npm run build:brand
 ```
+
+Two commands support the contribution wall:
+
+- `npm run seed:art` loads the opening collection. Run once per database, with
+  the object-storage variables set.
+- `npm run purge:expired` deletes stored files whose 180-day retention date has
+  passed, along with expired rate-limit rows. Run it on a schedule; `--dry-run`
+  lists what would go.
 
 ## Validation
 

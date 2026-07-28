@@ -30,6 +30,8 @@ const fieldsSchema = z.object({
     .regex(/^$|^[@a-zA-Z0-9._/:-]+$/, "Handles cannot contain spaces or markup."),
   body: z.string().max(ESSAY_MAX_LENGTH),
   language: z.enum(["en", "hi"]),
+  provenance: z.enum(["own", "public_domain"]).default("own"),
+  sourceUrl: z.string().trim().max(500),
   consent: z.literal("yes"),
   website: z.string().max(0),
   startedAt: z.coerce.number().int().positive(),
@@ -65,6 +67,21 @@ function remoteIdentifier(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    // Consumed before the body is read: a request that trips the limit should
+    // not first make the server buffer and parse a 4 MB multipart upload.
+    const allowed = await consumeRateLimit(
+      "contribution-submit",
+      remoteIdentifier(request),
+      5,
+      60 * 60 * 1000,
+    );
+    if (!allowed) {
+      return NextResponse.json(
+        { error: "Too many submissions. Please try again later." },
+        { status: 429 },
+      );
+    }
+
     const form = await request.formData();
     const fields = fieldsSchema.parse({
       kind: form.get("kind"),
@@ -76,6 +93,8 @@ export async function POST(request: NextRequest) {
       language: form.get("language"),
       consent: form.get("consent"),
       website: form.get("website") ?? "",
+      provenance: form.get("provenance") ?? "own",
+      sourceUrl: form.get("sourceUrl") ?? "",
       startedAt: form.get("startedAt"),
     });
 
@@ -88,24 +107,46 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Anything submitted faster than a human could fill the form is accepted
-    // silently, so a bot gets no signal about why it failed.
-    if (Date.now() - fields.startedAt < 2500) {
-      return NextResponse.json({ ok: true }, { status: 202 });
+    // Public-domain mode is only offered for writing: verifying that a photo
+    // or poster is genuinely free to share needs a licence page a moderator
+    // can read, which the admin "add directly" path handles instead.
+    if (fields.provenance === "public_domain") {
+      if (fields.kind !== "poem" && fields.kind !== "essay") {
+        return NextResponse.json(
+          { error: "Public-domain sharing is available for poems and essays.", field: "kind" },
+          { status: 400 },
+        );
+      }
+      // Without an author and a source a moderator cannot check the claim, and
+      // "public domain" becomes an honour system.
+      if (!fields.credit) {
+        return NextResponse.json(
+          { error: "Name the author of the original work.", field: "credit" },
+          { status: 400 },
+        );
+      }
+      if (!/^https:\/\/\S+$/.test(fields.sourceUrl)) {
+        return NextResponse.json(
+          { error: "Link where this was published, so a volunteer can check it.", field: "sourceUrl" },
+          { status: 400 },
+        );
+      }
+      if (fields.creditAccount) {
+        return NextResponse.json(
+          { error: "Someone else's work cannot be credited to your account.", field: "creditAccount" },
+          { status: 400 },
+        );
+      }
     }
 
-    const identifier = remoteIdentifier(request);
-    const allowed = await consumeRateLimit(
-      "contribution-submit",
-      identifier,
-      5,
-      60 * 60 * 1000,
-    );
-    if (!allowed) {
-      return NextResponse.json(
-        { error: "Too many submissions. Please try again later." },
-        { status: 429 },
-      );
+    // Anything submitted faster than a human could fill the form is accepted
+    // silently, so a bot gets no signal about why it failed. `startedAt` comes
+    // from the visitor's own clock, so a negative elapsed time means their
+    // device runs ahead of ours, not that they are a bot — trapping that would
+    // silently discard real work from anyone with an unsynced phone.
+    const elapsed = Date.now() - fields.startedAt;
+    if (elapsed >= 0 && elapsed < 2500) {
+      return NextResponse.json({ ok: true }, { status: 202 });
     }
 
     const isFileKind = fields.kind === "poster" || fields.kind === "image";
@@ -169,11 +210,11 @@ export async function POST(request: NextRequest) {
     const id = randomUUID();
     await db.execute({
       sql: `INSERT INTO contributions
-        (id, kind, title, subtitle, credit, credit_account, body, language,
-         storage_key, social_storage_key, mime_type, width, height, byte_size,
-         status, internal_notes, content_fingerprint, recovery_code_hash,
+        (id, kind, title, subtitle, credit, credit_account, provenance, source_url,
+         body, language, storage_key, social_storage_key, mime_type, width, height,
+         byte_size, status, internal_notes, content_fingerprint, recovery_code_hash,
          created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', '', ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', '', ?, ?, ?, ?)`,
       args: [
         id,
         fields.kind,
@@ -181,6 +222,8 @@ export async function POST(request: NextRequest) {
         fields.subtitle,
         fields.credit,
         fields.creditAccount,
+        fields.provenance,
+        fields.provenance === "public_domain" ? fields.sourceUrl : "",
         isFileKind ? "" : fields.body,
         fields.language,
         storageKey,

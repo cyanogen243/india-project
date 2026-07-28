@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { after, before, test } from "node:test";
+import { after, before, beforeEach, test } from "node:test";
 import { spawn, spawnSync } from "node:child_process";
 import { generateKeyPairSync } from "node:crypto";
 import { mkdtemp, rm, readFile } from "node:fs/promises";
@@ -167,6 +167,13 @@ after(async () => {
   if (testDbDir) await rm(testDbDir, { recursive: true, force: true });
 });
 
+// The route consumes the 5-per-hour limit on every request, deliberately
+// before the body is parsed. Each scenario below is a separate visitor, so the
+// counter is reset rather than making the tests share one visitor's budget.
+beforeEach(async () => {
+  if (db) await db.execute("DELETE FROM rate_limits");
+});
+
 test("a poem stays private until it is approved, then gets its own page", async () => {
   const title = "Test Poem For Review";
   const sent = await submit({
@@ -265,7 +272,11 @@ test("an uploaded image is private while pending and deleted on withdrawal", asy
 
   const published = await fetch(`${baseUrl}/api/contributions/${row.id}/file?variant=social`);
   assert.equal(published.status, 200);
-  assert.match(published.headers.get("cache-control") ?? "", /immutable/);
+  // Not `immutable`: a withdrawn file has to stop being served to people who
+  // already loaded it, which an immutable entry would prevent for a year.
+  const cacheControl = published.headers.get("cache-control") ?? "";
+  assert.match(cacheControl, /must-revalidate/);
+  assert.doesNotMatch(cacheControl, /immutable/);
   assert.match(published.headers.get("content-type") ?? "", /^image\//);
 
   const withdrawn = await lookup(code, "withdraw");
@@ -359,4 +370,127 @@ test("the retention sweep clears files once their date has passed", async () => 
   assert.equal(purged.storage_key, null, "the sweep removes the stored file");
   assert.equal(purged.social_storage_key, null);
   assert.equal(purged.status, "declined", "the row survives so the code still reports the outcome");
+});
+
+test("public-domain writing is attributed to its author, not licensed as ours", async () => {
+  const title = "Test Public Domain Poem";
+  const sent = await submit({
+    kind: "poem",
+    title,
+    body: "An old verse nobody alive wrote.",
+    credit: "Kabir",
+    provenance: "public_domain",
+    sourceUrl: "https://kavitakosh.org/kk/example",
+  });
+  assert.equal(sent.status, 201);
+
+  const row = await rowByTitle(title);
+  assert.equal(row.provenance, "public_domain");
+  assert.equal(row.source_url, "https://kavitakosh.org/kk/example");
+
+  const session = await adminSession();
+  await moderate(session, { id: String(row.id), status: "approved", internalNotes: "" });
+
+  const wall = await (await fetch(`${baseUrl}/art`)).text();
+  assert.match(wall, /Public domain/, "the tile states its own terms");
+  assert.doesNotMatch(
+    wall,
+    /Everything is free · non-commercial use · CC BY-NC-SA 4\.0/,
+    "the wall no longer claims one licence covers everything",
+  );
+
+  const page = await (await fetch(`${baseUrl}/art/${row.id}`)).text();
+  assert.match(page, /Public domain/);
+  assert.match(page, /kavitakosh\.org/, "the read page links the source for verification");
+});
+
+test("a public-domain claim has to be checkable, and only applies to writing", async () => {
+  const noSource = await submit({
+    kind: "poem",
+    title: "No Source Given",
+    body: "Text without any provenance link.",
+    credit: "Someone Old",
+    provenance: "public_domain",
+  });
+  assert.equal(noSource.status, 400, "a source link is required");
+
+  const noAuthor = await submit({
+    kind: "poem",
+    title: "No Author Given",
+    body: "Text without an author.",
+    provenance: "public_domain",
+    sourceUrl: "https://example.org/text",
+  });
+  assert.equal(noAuthor.status, 400, "the original author is required");
+
+  const bytes = await readFile("content/seed-art/poster-peaks.png");
+  const poster = await submit(
+    {
+      kind: "poster",
+      title: "Public Domain Poster",
+      credit: "Someone Old",
+      provenance: "public_domain",
+      sourceUrl: "https://example.org/poster",
+    },
+    { bytes, type: "image/png", name: "poster.png" },
+  );
+  assert.equal(poster.status, 400, "posters and images go through admin curation instead");
+});
+
+test("a withdrawn upload cannot be published again", async () => {
+  const title = "Test Republish Guard";
+  const bytes = await readFile("content/seed-art/poster-rays.png");
+  const sent = await submit({ kind: "image", title }, { bytes, type: "image/png", name: "p.png" });
+  assert.equal(sent.status, 201);
+  const row = await rowByTitle(title);
+  const session = await adminSession();
+
+  await moderate(session, { id: String(row.id), status: "approved", internalNotes: "" });
+  assert.equal((await lookup(sent.body.recoveryCode, "withdraw")).status, 200);
+
+  const republish = await moderate(session, {
+    id: String(row.id),
+    status: "approved",
+    internalNotes: "",
+  });
+  assert.equal(republish.status, 409, "its files are gone, so approving again is refused");
+
+  const wall = await (await fetch(`${baseUrl}/art`)).text();
+  assert.doesNotMatch(wall, new RegExp(title), "withdrawn work stays off the wall");
+});
+
+test("a clock running ahead does not silently discard the work", async () => {
+  const form = humanTimings(new FormData());
+  form.set("kind", "poem");
+  form.set("title", "Test Fast Clock");
+  form.set("body", "Submitted from a device whose clock runs ahead.");
+  // A device two minutes ahead of the server reports a negative elapsed time.
+  form.set("startedAt", String(Date.now() + 120_000));
+  const response = await fetch(`${baseUrl}/api/contributions`, { method: "POST", body: form });
+  assert.equal(response.status, 201, "clock skew is not treated as bot behaviour");
+  const body = await response.json();
+  assert.match(String(body.recoveryCode), /^[A-Z0-9]{8}$/, "a real code is still issued");
+  assert.ok(await rowByTitle("Test Fast Clock"), "and the work is stored");
+});
+
+test("the sweep also clears expired rate-limit rows", async () => {
+  await db.execute({
+    sql: `INSERT INTO rate_limits (key_hash, action, count, window_started_at, expires_at)
+          VALUES ('test-expired-key', 'contribution-submit', 3, ?, ?)`,
+    args: ["2020-01-01T00:00:00.000Z", "2020-01-02T00:00:00.000Z"],
+  });
+  const sweep = spawnSync(
+    process.execPath,
+    ["node_modules/tsx/dist/cli.mjs", "scripts/purge-expired.ts"],
+    { encoding: "utf8", env: { ...process.env, LIBSQL_URL: `file:${testDbPath}` } },
+  );
+  assert.equal(sweep.status, 0, sweep.stderr || sweep.stdout);
+  const left = await db.execute({
+    sql: "SELECT count(*) AS total FROM rate_limits WHERE key_hash = 'test-expired-key'",
+  });
+  assert.equal(
+    Number(left.rows[0].total),
+    0,
+    "IP-derived rows do not outlive the window they enforce",
+  );
 });

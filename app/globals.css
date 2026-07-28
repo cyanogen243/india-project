@@ -2519,6 +2519,13 @@ footer p {
   background: var(--paper-deep);
 }
 
+.admin-placeholder-note {
+  margin: 0.4rem 0 0;
+  color: #765105;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
 .contribute-receipt {
   display: grid;
   /* The receipt replaces the form beside a tall sidebar; without this the

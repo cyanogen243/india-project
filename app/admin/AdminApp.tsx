@@ -50,6 +50,9 @@ type Contribution = {
   status: string;
   internalNotes: string;
   declineReason: string | null;
+  provenance?: string;
+  sourceUrl?: string;
+  placeholder?: boolean;
   createdAt: string;
   reviewedAt: string | null;
 };
@@ -94,9 +97,13 @@ const contributionStatuses = ["pending", "approved", "declined", "withdrawn"];
 // Shown to the contributor when they enter their recovery code, so these are
 // worded to be read by the person whose work was declined. Internal notes stay
 // in the admin panel.
+// Which reasons a moderator may pick depends on what the contributor claimed:
+// "someone else's work" only makes sense against a claim of own work, and
+// "not actually public domain" only against a public-domain claim.
 const declineReasons: Record<string, string> = {
   off_topic: "Not related to the movement",
   not_own_work: "Appears to be someone else's work",
+  not_public_domain: "Not actually in the public domain",
   identifying_info: "Contains information that could identify people",
   low_quality: "Resolution too low to be usable",
   duplicate: "Already in the collection",
@@ -717,6 +724,11 @@ function ContributionWorkspace({
 }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("pending");
+  // Placeholders are scaffolding, not collection material. Surfacing a live
+  // count here is what stops them quietly becoming permanent.
+  const placeholdersLive = contributions.filter(
+    (item) => item.placeholder && item.status === "approved",
+  ).length;
   const filtered = contributions.filter(
     (item) =>
       (status === "all" || item.status === status) &&
@@ -730,6 +742,12 @@ function ContributionWorkspace({
         <div>
           <p className="eyebrow">Nothing is public until approved</p>
           <h2>Contributions</h2>
+          {placeholdersLive > 0 && (
+            <p className="admin-placeholder-note">
+              {placeholdersLive} placeholder{placeholdersLive === 1 ? "" : "s"} still on the
+              wall. They ship so the gallery is never empty — delete them as real work arrives.
+            </p>
+          )}
         </div>
         <div className="admin-actions">
           <input aria-label="Search contributions" placeholder="Search" value={query} onChange={(event) => setQuery(event.target.value)} />
@@ -846,7 +864,15 @@ function ContributionCard({
         <label>
           Reason shown to the contributor
           <select value={reason} onChange={(event) => setReason(event.target.value)}>
-            {Object.entries(declineReasons).map(([value, label]) => (
+            {Object.entries(declineReasons)
+              .filter(([value]) =>
+                value === "not_own_work"
+                  ? contribution.provenance !== "public_domain"
+                  : value === "not_public_domain"
+                    ? contribution.provenance === "public_domain"
+                    : true,
+              )
+              .map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
             ))}
           </select>

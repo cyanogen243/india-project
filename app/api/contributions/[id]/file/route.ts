@@ -58,9 +58,16 @@ export async function GET(
       "Content-Disposition": `${asDownload ? "attachment" : "inline"}; filename="${safeTitle}.${extension}"`,
       "X-Content-Type-Options": "nosniff",
       "Content-Security-Policy": "default-src 'none'; sandbox",
+      // Deliberately revalidated rather than `immutable`: withdrawal and
+      // moderation have to take effect for people who already loaded the file.
+      // An immutable year-long entry would keep serving a poster the
+      // contributor took down — or one declined for identifying someone —
+      // from browser and shared caches at this same URL, with no way to
+      // invalidate it. A short window with revalidation keeps most of the
+      // bandwidth win and lets removal actually remove.
       "Cache-Control":
         row.status === "approved"
-          ? "public, max-age=31536000, immutable"
+          ? "public, max-age=300, must-revalidate"
           : "private, no-store",
     },
   });

@@ -19,7 +19,11 @@ export function ContributeForm({ language }: { language: Language }) {
   const startedAt = useRef(0);
   const fileInput = useRef<HTMLInputElement>(null);
   const [kind, setKind] = useState<Kind>("poster");
-  const [credited, setCredited] = useState(false);
+  // Three ways to attribute: your own work anonymously, your own work under a
+  // public account, or someone else's public-domain work you are passing on.
+  const [creditMode, setCreditMode] = useState<"anonymous" | "account" | "public_domain">(
+    "anonymous",
+  );
   const [preview, setPreview] = useState<{ url: string; name: string; size: number } | null>(null);
   const [dragging, setDragging] = useState(false);
   const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
@@ -28,6 +32,7 @@ export function ContributeForm({ language }: { language: Language }) {
   const [copied, setCopied] = useState(false);
 
   const isFileKind = kind === "poster" || kind === "image";
+  const isTextKind = kind === "poem" || kind === "essay";
 
   useEffect(() => {
     startedAt.current = Date.now();
@@ -124,14 +129,28 @@ export function ContributeForm({ language }: { language: Language }) {
         form.set("language", language);
         form.set("startedAt", String(startedAt.current));
         if (!isFileKind) form.delete("file");
-        // One credit mode at a time.
-        if (credited) form.set("credit", "");
-        else form.set("creditAccount", "");
+        // One credit mode at a time — the server rejects a submission that
+        // claims both an alias and an account.
+        form.set("provenance", creditMode === "public_domain" ? "public_domain" : "own");
+        if (creditMode !== "account") form.set("creditAccount", "");
+        if (creditMode === "account") form.set("credit", "");
+        if (creditMode !== "public_domain") form.delete("sourceUrl");
         try {
           const response = await fetch("/api/contributions", { method: "POST", body: form });
           const value = await response.json();
           if (!response.ok) throw new Error(value.error ?? "Submission failed");
-          setRecoveryCode(String(value.recoveryCode ?? ""));
+          // A 202 means the anti-bot trap swallowed it and nothing was stored,
+          // so there is no code. Showing the receipt anyway would tell someone
+          // their work is queued, under a warning that the blank code cannot
+          // be recovered.
+          if (!value.recoveryCode) {
+            throw new Error(
+              hindi
+                ? "यह भेजा नहीं जा सका। एक पल रुककर दोबारा भेजें।"
+                : "That did not go through. Give it a moment and send again.",
+            );
+          }
+          setRecoveryCode(String(value.recoveryCode));
           setState("sent");
         } catch (error) {
           setState("error");
@@ -155,7 +174,13 @@ export function ContributeForm({ language }: { language: Language }) {
                 name="kindChoice"
                 value={value}
                 checked={kind === value}
-                onChange={() => setKind(value)}
+                onChange={() => {
+                setKind(value);
+                // Public domain is only offered for writing.
+                if ((value === "poster" || value === "image") && creditMode === "public_domain") {
+                  setCreditMode("anonymous");
+                }
+              }}
               />
               <strong>{label}</strong>
               <small>{hint}</small>
@@ -170,11 +195,15 @@ export function ContributeForm({ language }: { language: Language }) {
       <aside className="contribute-terms">
         <h3>{hindi ? "भेजने से पहले" : "Before you send"}</h3>
         <ul>
-          <li>{hindi ? "केवल अपना बनाया हुआ काम भेजें।" : "Only send work you made yourself."}</li>
           <li>
             {hindi
-              ? "स्वीकृत काम CC BY-NC-SA 4.0 के तहत जारी होगा: कोई भी इसे मुफ़्त साझा और रीमिक्स कर सकता है, पर बेच नहीं सकता।"
-              : "Approved work is released under CC BY-NC-SA 4.0 — anyone may share and remix it freely, but nobody may sell it."}
+              ? "अपना बनाया हुआ काम भेजें — या कोई सार्वजनिक-डोमेन रचना, स्रोत के साथ।"
+              : "Send work you made yourself — or a public-domain work, with its source."}
+          </li>
+          <li>
+            {hindi
+              ? "आपका अपना स्वीकृत काम CC BY-NC-SA 4.0 के तहत जारी होगा: कोई भी इसे मुफ़्त साझा और रीमिक्स कर सकता है, पर बेच नहीं सकता। सार्वजनिक-डोमेन रचनाएँ अपनी शर्तों के साथ रहती हैं।"
+              : "Your own approved work is released under CC BY-NC-SA 4.0 — anyone may share and remix it freely, but nobody may sell it. Public-domain works keep their own terms."}
           </li>
         </ul>
       </aside>
@@ -199,28 +228,40 @@ export function ContributeForm({ language }: { language: Language }) {
       <fieldset className="contribute-kind">
         <legend>{hindi ? "श्रेय" : "Credit"}</legend>
         <div className="contribute-kind-grid">
-          <label className={`contribute-kind-card ${credited ? "" : "selected"}`}>
+          <label className={`contribute-kind-card ${creditMode === "anonymous" ? "selected" : ""}`}>
             <input
               type="radio"
               name="creditChoice"
-              checked={!credited}
-              onChange={() => setCredited(false)}
+              checked={creditMode === "anonymous"}
+              onChange={() => setCreditMode("anonymous")}
             />
             <strong>{hindi ? "गुमनाम" : "Anonymous"}</strong>
-            <small>{hindi ? "आपके बारे में कुछ नहीं रखा जाता" : "Nothing about you is stored"}</small>
+            <small>{hindi ? "आपका अपना काम · आपके बारे में कुछ नहीं रखा जाता" : "Your own work · nothing about you is stored"}</small>
           </label>
-          <label className={`contribute-kind-card ${credited ? "selected" : ""}`}>
+          <label className={`contribute-kind-card ${creditMode === "account" ? "selected" : ""}`}>
             <input
               type="radio"
               name="creditChoice"
-              checked={credited}
-              onChange={() => setCredited(true)}
+              checked={creditMode === "account"}
+              onChange={() => setCreditMode("account")}
             />
             <strong>{hindi ? "सार्वजनिक श्रेय दें" : "Credit me publicly"}</strong>
-            <small>{hindi ? "एक सार्वजनिक खाता, दीवार पर दिखेगा" : "A public account, shown on the wall"}</small>
+            <small>{hindi ? "आपका अपना काम · खाता दीवार पर दिखेगा" : "Your own work · account shown on the wall"}</small>
           </label>
+          {isTextKind && (
+            <label className={`contribute-kind-card ${creditMode === "public_domain" ? "selected" : ""}`}>
+              <input
+                type="radio"
+                name="creditChoice"
+                checked={creditMode === "public_domain"}
+                onChange={() => setCreditMode("public_domain")}
+              />
+              <strong>{hindi ? "सार्वजनिक डोमेन" : "Public domain"}</strong>
+              <small>{hindi ? "किसी और का काम जो साझा करने के लिए स्वतंत्र है" : "Someone else's work that is free to share"}</small>
+            </label>
+          )}
         </div>
-        {credited ? (
+        {creditMode === "account" && (
           <label className="contribute-credit-field">
             {hindi ? "सार्वजनिक खाता" : "Public account"}
             <input
@@ -229,7 +270,8 @@ export function ContributeForm({ language }: { language: Language }) {
               placeholder={hindi ? "@हैंडल — X, Instagram या Bluesky" : "@handle — X, Instagram or Bluesky"}
             />
           </label>
-        ) : (
+        )}
+        {creditMode === "anonymous" && (
           <label className="contribute-credit-field">
             {hindi ? "नाम या उपनाम (वैकल्पिक)" : "Name or alias (optional)"}
             <input
@@ -238,6 +280,34 @@ export function ContributeForm({ language }: { language: Language }) {
               placeholder={hindi ? "खाली छोड़ने पर 'गुमनाम' दिखेगा" : "Left blank, the wall shows “Anonymous”"}
             />
           </label>
+        )}
+        {creditMode === "public_domain" && (
+          <>
+            <label className="contribute-credit-field">
+              {hindi ? "मूल लेखक" : "Original author"}
+              <input
+                name="credit"
+                maxLength={80}
+                required
+                placeholder={hindi ? "जैसे भगत सिंह" : "e.g. Bhagat Singh"}
+              />
+            </label>
+            <label className="contribute-credit-field">
+              {hindi ? "यह कहाँ प्रकाशित है" : "Where it is published"}
+              <input
+                name="sourceUrl"
+                type="url"
+                maxLength={500}
+                required
+                placeholder="https://www.marxists.org/…"
+              />
+            </label>
+            <p className="privacy">
+              {hindi
+                ? "एक स्वयंसेवक इस लिंक से जाँचेगा कि यह वाक़ई सार्वजनिक डोमेन में है।"
+                : "A volunteer will use this link to check that the work really is free to share."}
+            </p>
+          </>
         )}
       </fieldset>
 
@@ -329,8 +399,12 @@ export function ContributeForm({ language }: { language: Language }) {
         <input name="consent" type="checkbox" value="yes" required />
         <span>
           {hindi
-            ? "यह काम मेरा अपना है, और मैं इसे CC BY-NC-SA 4.0 के तहत जारी करता/करती हूँ।"
-            : "This work is my own, and I release it under CC BY-NC-SA 4.0."}
+            ? creditMode === "public_domain"
+              ? "यह रचना सार्वजनिक डोमेन में है और साझा करने के लिए स्वतंत्र है; मैंने स्रोत दिया है।"
+              : "यह काम मेरा अपना है, और मैं इसे CC BY-NC-SA 4.0 के तहत जारी करता/करती हूँ।"
+            : creditMode === "public_domain"
+              ? "This work is in the public domain and free to share, and I have linked where it came from."
+              : "This work is my own, and I release it under CC BY-NC-SA 4.0."}
         </span>
       </label>
 

@@ -22,6 +22,10 @@ const statusLabels: Record<string, { en: string; hi: string }> = {
 
 const reasonLabels: Record<string, { en: string; hi: string }> = {
   off_topic: { en: "Not related to the movement", hi: "आंदोलन से संबंधित नहीं" },
+  not_public_domain: {
+    en: "This is not actually free to share",
+    hi: "यह वाक़ई साझा करने के लिए स्वतंत्र नहीं है",
+  },
   not_own_work: { en: "Appears to be someone else's work", hi: "यह किसी और का काम लगता है" },
   identifying_info: {
     en: "Contains information that could identify people",

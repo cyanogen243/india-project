@@ -10,9 +10,10 @@ import type { PublicContribution } from "@/app/lib/database";
 // hand off to their read page. Mirrors POEM_TILE_LIMIT server-side.
 const POEM_TILE_LIMIT = 600;
 
-// Character count under-measures Devanagari (each visible letter is several
-// codepoints), so a poem also cuts by height: anything over POEM_TILE_LINES
-// lines shows the first POEM_TEASER_LINES — a clean break for couplet forms.
+// A character count over-measures Devanagari, where one visible letter can be
+// several code units, so the line count is what actually decides: anything
+// over POEM_TILE_LINES shows its first POEM_TEASER_LINES, a clean break for
+// couplet forms. The character limit only catches prose-shaped poems.
 const POEM_TILE_LINES = 12;
 const POEM_TEASER_LINES = 8;
 
@@ -22,14 +23,24 @@ const POEM_TEASER_LINES = 8;
 // rest, so this only bounds how much text the clamp works with.
 const ESSAY_TEASER_LIMIT = 240;
 
+// Cutting by code unit can orphan a combining mark or split a surrogate pair,
+// which renders as a broken glyph. Segmenting first cuts on real characters.
+function cutGraphemes(value: string, limit: number) {
+  const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+  const out: string[] = [];
+  for (const { segment } of segmenter.segment(value)) {
+    if (out.length >= limit) break;
+    out.push(segment);
+  }
+  return out.join("");
+}
+
 function essayTeaser(body: string) {
-  return body
-    .slice(0, ESSAY_TEASER_LIMIT * 2)
+  return cutGraphemes(body, ESSAY_TEASER_LIMIT * 2)
     .split(/\n\s*\n/)
     .map((paragraph) => paragraph.replace(/\s+/g, " ").trim())
     .filter(Boolean)
-    .join(" — ")
-    .slice(0, ESSAY_TEASER_LIMIT);
+    .join(" — ");
 }
 
 // Writing tiles are coloured from the palette rather than at random, so a poem
@@ -85,6 +96,15 @@ function KindTag({ kind, hindi }: { kind: PublicContribution["kind"]; hindi: boo
       {KIND_LABELS[kind][hindi ? "hi" : "en"]}
     </span>
   );
+}
+
+function Licence({ item, hindi }: { item: PublicContribution; hindi: boolean }) {
+  // Nobody can release someone else's work under CC, so a passed-on
+  // public-domain piece says what it actually is.
+  if (item.provenance === "public_domain") {
+    return <>{hindi ? "सार्वजनिक डोमेन" : "Public domain"}</>;
+  }
+  return <>CC BY-NC-SA 4.0</>;
 }
 
 function Credit({ item, hindi }: { item: PublicContribution; hindi: boolean }) {
@@ -146,16 +166,20 @@ export function ContributionGallery({
         </div>
         <p className="gallery-licence">
           {hindi
-            ? "सब कुछ मुफ़्त है · ग़ैर-व्यावसायिक उपयोग · CC BY-NC-SA 4.0"
-            : "Everything is free · non-commercial use · CC BY-NC-SA 4.0"}
+            ? "सब कुछ मुफ़्त है · ग़ैर-व्यावसायिक उपयोग · हर काम की शर्तें उसके साथ"
+            : "Everything is free · non-commercial use · terms shown on each work"}
         </p>
       </div>
 
       {visible.length === 0 ? (
         <p className="gallery-empty">
-          {hindi
-            ? "अभी यहाँ कुछ नहीं है। पहला योगदान आपका हो सकता है।"
-            : "Nothing here yet. The first contribution could be yours."}
+          {items.length === 0
+            ? hindi
+              ? "अभी यहाँ कुछ नहीं है। पहला योगदान आपका हो सकता है।"
+              : "Nothing here yet. The first contribution could be yours."
+            : hindi
+              ? "इस श्रेणी में अभी कुछ नहीं है।"
+              : "Nothing in this category yet."}
         </p>
       ) : (
         <div className="gallery-wall">
@@ -186,7 +210,10 @@ export function ContributionGallery({
                     {item.subtitle && <p className="tile-sub">{item.subtitle}</p>}
                     <p className={poemIsCut ? "tile-teaser" : undefined}>
                       {poemIsCut
-                        ? poemLines.slice(0, POEM_TEASER_LINES).join("\n").slice(0, POEM_TILE_LIMIT)
+                        ? cutGraphemes(
+                            poemLines.slice(0, POEM_TEASER_LINES).join("\n"),
+                            POEM_TILE_LIMIT,
+                          )
                         : item.body}
                     </p>
                     {poemIsCut && (
@@ -215,6 +242,8 @@ export function ContributionGallery({
                       <KindTag kind={item.kind} hindi={hindi} />
                       <small>
                         <Credit item={item} hindi={hindi} />
+                        {" · "}
+                        <Licence item={item} hindi={hindi} />
                         {isFile && item.width && item.height
                           ? ` · ${item.width}×${item.height}`
                           : ""}

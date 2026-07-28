@@ -88,8 +88,13 @@ export const migrationStatements = [
       CHECK (status IN ('pending', 'approved', 'declined', 'withdrawn')),
     internal_notes TEXT NOT NULL DEFAULT '', content_fingerprint TEXT,
     seeded INTEGER NOT NULL DEFAULT 0,
+    placeholder INTEGER NOT NULL DEFAULT 0,
+    provenance TEXT NOT NULL DEFAULT 'own'
+      CHECK (provenance IN ('own', 'public_domain')),
+    source_url TEXT NOT NULL DEFAULT '',
     decline_reason TEXT CHECK (decline_reason IN
-      ('off_topic', 'not_own_work', 'identifying_info', 'low_quality', 'duplicate', 'other')),
+      ('off_topic', 'not_own_work', 'not_public_domain', 'identifying_info',
+       'low_quality', 'duplicate', 'other')),
     recovery_code_hash TEXT NOT NULL,
     created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
     reviewed_by TEXT, reviewed_at TEXT, retention_eligible_at TEXT
@@ -128,6 +133,7 @@ export async function ensureDatabase() {
         await db.execute(sql);
       }
       await ensureVolunteerContactColumns(db);
+      await ensureContributionProvenance(db);
       await seedContent(db);
       return db;
     })().catch((error) => {
@@ -136,6 +142,70 @@ export async function ensureDatabase() {
     });
   }
   return ready;
+}
+
+/**
+ * Provenance splits "the contributor made this" from "the contributor is
+ * passing on someone else's public-domain work", and `placeholder` marks the
+ * geometric posters that ship only so the wall is never empty.
+ *
+ * The two columns add cleanly, but `decline_reason` carries a CHECK constraint
+ * and SQLite cannot alter one in place, so a database created before
+ * `not_public_domain` existed has to be rebuilt to accept it. The rebuild is
+ * guarded on the stored schema text, runs inside a transaction, and copies
+ * only the columns both definitions share.
+ */
+async function ensureContributionProvenance(db: Client) {
+  const columns = await db.execute("PRAGMA table_info(contributions)");
+  const names = new Set(columns.rows.map((row) => String(row.name)));
+  if (names.size === 0) return;
+
+  if (!names.has("provenance")) {
+    await db.execute(
+      "ALTER TABLE contributions ADD COLUMN provenance TEXT NOT NULL DEFAULT 'own'",
+    );
+  }
+  if (!names.has("source_url")) {
+    await db.execute("ALTER TABLE contributions ADD COLUMN source_url TEXT NOT NULL DEFAULT ''");
+  }
+  if (!names.has("placeholder")) {
+    await db.execute("ALTER TABLE contributions ADD COLUMN placeholder INTEGER NOT NULL DEFAULT 0");
+  }
+
+  const schema = await db.execute(
+    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'contributions'",
+  );
+  const existing = String(schema.rows[0]?.sql ?? "");
+  if (!existing || existing.includes("not_public_domain")) return;
+
+  const rebuilt = String(
+    migrationStatements.find((statement) => statement.includes("CREATE TABLE IF NOT EXISTS contributions")),
+  ).replace("CREATE TABLE IF NOT EXISTS contributions", "CREATE TABLE contributions_rebuilt");
+  const shared = [...names].join(", ");
+
+  await db.execute("PRAGMA foreign_keys = OFF");
+  await db.execute("BEGIN");
+  try {
+    await db.execute(rebuilt);
+    await db.execute(
+      `INSERT INTO contributions_rebuilt (${shared}) SELECT ${shared} FROM contributions`,
+    );
+    await db.execute("DROP TABLE contributions");
+    await db.execute("ALTER TABLE contributions_rebuilt RENAME TO contributions");
+    await db.execute("COMMIT");
+  } catch (error) {
+    await db.execute("ROLLBACK");
+    throw error;
+  } finally {
+    await db.execute("PRAGMA foreign_keys = ON");
+  }
+
+  // The indexes belonged to the dropped table.
+  for (const statement of migrationStatements) {
+    if (statement.includes("INDEX") && statement.includes("contributions")) {
+      await db.execute(statement);
+    }
+  }
 }
 
 async function ensureVolunteerContactColumns(db: Client) {
@@ -199,6 +269,11 @@ export type PublicContribution = {
   subtitle: string;
   credit: string;
   creditAccount: string;
+  // "own" is the contributor's own work under CC BY-NC-SA; "public_domain" is
+  // someone else's work passed on, where `credit` names the original author
+  // and `sourceUrl` is where a moderator verified it.
+  provenance: "own" | "public_domain";
+  sourceUrl: string;
   body: string;
   language: string;
   width: number | null;
@@ -214,8 +289,8 @@ export type PublicContribution = {
 export async function loadApprovedContributions(): Promise<PublicContribution[]> {
   const db = await ensureDatabase();
   const result = await db.execute(
-    `SELECT id, kind, title, subtitle, credit, credit_account, body, language,
-            width, height, created_at
+    `SELECT id, kind, title, subtitle, credit, credit_account, provenance,
+            source_url, body, language, width, height, created_at
      FROM contributions
      WHERE status = 'approved'
      ORDER BY created_at DESC`,
@@ -227,6 +302,8 @@ export async function loadApprovedContributions(): Promise<PublicContribution[]>
     subtitle: String(row.subtitle),
     credit: String(row.credit),
     creditAccount: String(row.credit_account),
+    provenance: String(row.provenance) as PublicContribution["provenance"],
+    sourceUrl: String(row.source_url ?? ""),
     body: String(row.body),
     language: String(row.language),
     width: row.width === null ? null : Number(row.width),
@@ -242,8 +319,8 @@ export async function loadApprovedContributions(): Promise<PublicContribution[]>
 export async function loadApprovedText(id: string): Promise<PublicContribution | null> {
   const db = await ensureDatabase();
   const result = await db.execute({
-    sql: `SELECT id, kind, title, subtitle, credit, credit_account, body,
-                 language, width, height, created_at
+    sql: `SELECT id, kind, title, subtitle, credit, credit_account, provenance,
+                 source_url, body, language, width, height, created_at
           FROM contributions
           WHERE id = ? AND status = 'approved' AND kind IN ('poem', 'essay')`,
     args: [id],
@@ -257,6 +334,8 @@ export async function loadApprovedText(id: string): Promise<PublicContribution |
     subtitle: String(row.subtitle),
     credit: String(row.credit),
     creditAccount: String(row.credit_account),
+    provenance: String(row.provenance) as PublicContribution["provenance"],
+    sourceUrl: String(row.source_url ?? ""),
     body: String(row.body),
     language: String(row.language),
     width: null,
@@ -324,6 +403,22 @@ export async function writeAuditEvent(
   });
 }
 
+/**
+ * The rate limiter and visitor counter both key on an IP-derived HMAC. In
+ * production that secret is what stops a leaked database from being replayed
+ * against a candidate IP range to identify who submitted a given poster, so a
+ * missing secret is refused rather than quietly replaced by a constant that is
+ * published in this repository.
+ */
+function networkHashSecret() {
+  const secret = process.env.RATE_LIMIT_SECRET ?? process.env.SESSION_SECRET;
+  if (secret) return secret;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("RATE_LIMIT_SECRET (or SESSION_SECRET) must be set in production.");
+  }
+  return "local-development";
+}
+
 export async function consumeRateLimit(
   action: string,
   identifier: string,
@@ -332,7 +427,7 @@ export async function consumeRateLimit(
 ) {
   const db = await ensureDatabase();
   const now = Date.now();
-  const secret = process.env.RATE_LIMIT_SECRET ?? process.env.SESSION_SECRET ?? "local-development";
+  const secret = networkHashSecret();
   const keyHash = createHmac("sha256", secret)
     .update(`${action}:${identifier}`)
     .digest("hex");
@@ -374,10 +469,7 @@ export function hashToken(value: string) {
 }
 
 export function hashNetworkIdentifier(purpose: string, identifier: string) {
-  const secret =
-    process.env.RATE_LIMIT_SECRET ??
-    process.env.SESSION_SECRET ??
-    "local-development";
+  const secret = networkHashSecret();
   return createHmac("sha256", secret)
     .update(`${purpose}:${identifier}`)
     .digest("hex");

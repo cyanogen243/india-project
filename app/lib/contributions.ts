@@ -139,7 +139,12 @@ export async function processImage(input: Uint8Array): Promise<ProcessedImage> {
 
   const source = sharp(Buffer.from(input), { failOn: "error", limitInputPixels: MAX_INPUT_PIXELS });
   const metadata = await source.metadata();
-  if (!metadata.width || !metadata.height) {
+  // sharp reports metadata.width/height before EXIF orientation is applied,
+  // but both variants below are produced through .rotate(). A portrait phone
+  // photo would otherwise be recorded transposed — wrong dimensions in the
+  // caption, and a wrongly shaped box reserved on the wall.
+  const oriented = metadata.autoOrient ?? { width: metadata.width, height: metadata.height };
+  if (!oriented.width || !oriented.height) {
     throw new Error("That image could not be read.");
   }
 
@@ -166,7 +171,7 @@ export async function processImage(input: Uint8Array): Promise<ProcessedImage> {
     printBytes,
     socialBytes,
     mimeType: "image/png",
-    width: metadata.width,
-    height: metadata.height,
+    width: oriented.width,
+    height: oriented.height,
   };
 }

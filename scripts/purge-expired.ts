@@ -3,11 +3,11 @@ import { deleteObject } from "../app/lib/storage";
 
 /**
  * Retention sweep. Declined and withdrawn contributions carry a
- * `retention_eligible_at` date (180 days out, set when the status changes);
- * volunteer submissions carry the same column. Nothing acted on those dates
- * until this script, so rejected uploads stayed in object storage forever —
- * material an anonymous contributor asked us to remove, or that a moderator
- * declined precisely because it should not be kept.
+ * `retention_eligible_at` date (180 days out, set when the status changes).
+ * Nothing acted on those dates until this script, so rejected uploads stayed
+ * in object storage forever — material an anonymous contributor asked us to
+ * remove, or that a moderator declined precisely because it should not be
+ * kept. Expired rate-limit rows go too; see the note further down.
  *
  * Removing the stored objects is the point; the row stays so the recovery code
  * still reports the outcome and the audit trail keeps its subject. A row whose
@@ -50,7 +50,27 @@ export async function purgeExpired({ dryRun = false, now = new Date() } = {}) {
     console.log(`${dryRun ? "would purge" : "purged"} files for ${row.status}: ${row.title}`);
   }
 
-  return { contributions: expired.rows.length, files };
+  // Rate-limit rows are keyed on an HMAC of the caller's IP and stamped with
+  // the moment they acted. Left to accumulate they outlive every retention
+  // promise the site makes, and their timestamps line up with contribution
+  // timestamps precisely enough to link a submission to an IP if the database
+  // ever leaks. Nothing needs them once the window has closed.
+  const staleLimits = await db.execute({
+    sql: "SELECT count(*) AS total FROM rate_limits WHERE expires_at <= ?",
+    args: [cutoff],
+  });
+  const limits = Number(staleLimits.rows[0]?.total ?? 0);
+  if (limits > 0) {
+    if (!dryRun) {
+      await db.execute({
+        sql: "DELETE FROM rate_limits WHERE expires_at <= ?",
+        args: [cutoff],
+      });
+    }
+    console.log(`${dryRun ? "would clear" : "cleared"} ${limits} expired rate-limit row(s)`);
+  }
+
+  return { contributions: expired.rows.length, files, rateLimits: limits };
 }
 
 const invokedDirectly = process.argv[1]?.endsWith("purge-expired.ts");
@@ -58,6 +78,7 @@ if (invokedDirectly) {
   const dryRun = process.argv.includes("--dry-run");
   const result = await purgeExpired({ dryRun });
   console.log(
-    `${dryRun ? "Dry run: " : ""}${result.contributions} contribution(s), ${result.files} file(s).`,
+    `${dryRun ? "Dry run: " : ""}${result.contributions} contribution(s), ` +
+      `${result.files} file(s), ${result.rateLimits} rate-limit row(s).`,
   );
 }

@@ -40,7 +40,20 @@ export async function ContributionReadPage({
           </p>
           <div className="read-body">{item.body}</div>
           <footer className="read-footer">
-            <small>CC BY-NC-SA 4.0 · {hindi ? "साझा करने के लिए स्वतंत्र" : "free to share"}</small>
+            <small>
+              {item.provenance === "public_domain"
+                ? hindi
+                  ? "सार्वजनिक डोमेन · साझा करने के लिए स्वतंत्र"
+                  : "Public domain · free to share"
+                : `CC BY-NC-SA 4.0 · ${hindi ? "साझा करने के लिए स्वतंत्र" : "free to share"}`}
+            </small>
+            {item.provenance === "public_domain" && item.sourceUrl && (
+              <small>
+                <a href={item.sourceUrl} target="_blank" rel="noreferrer noopener">
+                  {hindi ? "मूल स्रोत" : "Original source"}
+                </a>
+              </small>
+            )}
             <Link href={hindi ? "/hi/art" : "/art"}>
               {hindi ? "← दीवार पर वापस" : "← Back to the wall"}
             </Link>
