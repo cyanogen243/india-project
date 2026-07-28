@@ -47,7 +47,7 @@ const titles: Record<Language, Record<PageKind, string>> = {
     "reading-room": "Reading room",
     resources: "Partners and trusted resources",
     volunteer: "Volunteer with The India Project",
-    art: "Art and writing",
+    art: "Art & Writing",
     contribute: "Share your poster or writing",
     corrections: "Corrections and retractions",
     evidence: "Sensitive evidence intake",
