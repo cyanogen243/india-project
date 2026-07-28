@@ -953,7 +953,9 @@ function ContributionWorkspace({
             }}
           />
         ))}
-        {filtered.length === 0 && <p>Nothing here right now.</p>}
+        {filtered.length === 0 && (
+          <p className="volunteer-admin-empty">Nothing here right now.</p>
+        )}
       </div>
     </section>
   );

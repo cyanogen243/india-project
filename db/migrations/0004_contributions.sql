@@ -18,8 +18,13 @@ CREATE TABLE IF NOT EXISTS contributions (
   internal_notes TEXT NOT NULL DEFAULT '',
   content_fingerprint TEXT,
   seeded INTEGER NOT NULL DEFAULT 0,
+  placeholder INTEGER NOT NULL DEFAULT 0,
+  provenance TEXT NOT NULL DEFAULT 'own'
+    CHECK (provenance IN ('own', 'public_domain')),
+  source_url TEXT NOT NULL DEFAULT '',
   decline_reason TEXT CHECK (decline_reason IN
-    ('off_topic', 'not_own_work', 'identifying_info', 'low_quality', 'duplicate', 'other')),
+    ('off_topic', 'not_own_work', 'not_public_domain', 'identifying_info',
+     'low_quality', 'duplicate', 'other')),
   recovery_code_hash TEXT NOT NULL,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,

@@ -166,7 +166,6 @@ export async function ensureDatabase() {
  */
 async function ensureContributionProvenance(db: Client) {
   const columns = await db.execute("PRAGMA table_info(contributions)");
-  if (columns.rows.length === 0) return;
   const names = new Set(columns.rows.map((row) => String(row.name)));
 
   if (!names.has("provenance")) {
@@ -224,6 +223,11 @@ async function ensureContributionProvenance(db: Client) {
       `INSERT INTO contributions_rebuilt (${shared}) SELECT ${shared} FROM contributions`,
       "DROP TABLE contributions",
       "ALTER TABLE contributions_rebuilt RENAME TO contributions",
+      // Every contributions index must live in migrationStatements, because
+      // this replay is the only thing that recreates them after the table is
+      // dropped. An index created outside that list — the way
+      // ensureVolunteerColumns creates volunteers_team_idx — would vanish
+      // here silently, taking any UNIQUE constraint with it.
       ...migrationStatements.filter(
         (statement) => statement.includes("INDEX") && statement.includes("contributions"),
       ),

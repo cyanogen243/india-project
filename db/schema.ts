@@ -169,10 +169,22 @@ export const contributions = sqliteTable(
     internalNotes: text("internal_notes").notNull().default(""),
     contentFingerprint: text("content_fingerprint"),
     seeded: integer("seeded", { mode: "boolean" }).notNull().default(false),
+    // Scaffolding that ships so the wall is never empty, distinct from the
+    // permanent collection; the admin panel counts these so they are not
+    // quietly kept forever.
+    placeholder: integer("placeholder", { mode: "boolean" }).notNull().default(false),
+    // "own" is the contributor's work under CC BY-NC-SA; "public_domain" is
+    // someone else's work passed on, where credit names the original author
+    // and sourceUrl is the licence page a moderator checked.
+    provenance: text("provenance", { enum: ["own", "public_domain"] })
+      .notNull()
+      .default("own"),
+    sourceUrl: text("source_url").notNull().default(""),
     declineReason: text("decline_reason", {
       enum: [
         "off_topic",
         "not_own_work",
+        "not_public_domain",
         "identifying_info",
         "low_quality",
         "duplicate",

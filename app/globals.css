@@ -2682,6 +2682,14 @@ button.gallery-art {
   text-transform: uppercase;
 }
 
+/* Our contribution add form has the panel's only inline checkbox; without
+   this the .admin-shell label grid stacks the box above its own text. */
+.admin-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .admin-placeholder-note {
   margin: 0.4rem 0 0;
   color: #765105;
