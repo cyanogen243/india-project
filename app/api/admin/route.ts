@@ -295,6 +295,7 @@ export async function POST(request: NextRequest) {
             .enum([
               "off_topic",
               "not_own_work",
+              "not_public_domain",
               "identifying_info",
               "low_quality",
               "duplicate",
@@ -323,6 +324,15 @@ export async function POST(request: NextRequest) {
       // null the keys. Approving such a row again would put a permanently
       // broken card on the wall and republish work its contributor took down.
       const isFileKind = previous.kind === "poster" || previous.kind === "image";
+      if (input.status === "approved" && previous.status === "withdrawn") {
+        return NextResponse.json(
+          {
+            error:
+              "The contributor took this down. It cannot be published again without a fresh submission.",
+          },
+          { status: 409 },
+        );
+      }
       if (input.status === "approved" && isFileKind && !previous.storage_key) {
         return NextResponse.json(
           {

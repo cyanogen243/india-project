@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { consumeRateLimit, ensureDatabase, writeAuditEvent } from "@/app/lib/database";
+import { consumeRateLimit, ensureDatabase, rateLimitExceeded, writeAuditEvent } from "@/app/lib/database";
 import {
   ESSAY_MAX_LENGTH,
   MAX_UPLOAD_BYTES,
@@ -65,17 +65,25 @@ function remoteIdentifier(request: NextRequest) {
   );
 }
 
+// SQLite stores text up to the first NUL byte, so a value that passes
+// validation can land in the row truncated — short enough to slip under the
+// length floors, or empty. Control characters have no place in a title or a
+// poem anyway; newlines and tabs stay.
+function withoutControlCharacters(value: unknown) {
+  return typeof value === "string"
+    // eslint-disable-next-line no-control-regex
+    ? value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+    : value;
+}
+
 export async function POST(request: NextRequest) {
   try {
-    // Consumed before the body is read: a request that trips the limit should
-    // not first make the server buffer and parse a 4 MB multipart upload.
-    const allowed = await consumeRateLimit(
-      "contribution-submit",
-      remoteIdentifier(request),
-      5,
-      60 * 60 * 1000,
-    );
-    if (!allowed) {
+    // Checked before the body is read, so a caller already over the limit
+    // cannot make the server buffer and parse a 4 MB upload. The allowance is
+    // only spent once the work is actually stored — a rejected file or a
+    // validation error should not cost a visitor an hour of access.
+    const identifier = remoteIdentifier(request);
+    if (await rateLimitExceeded("contribution-submit", identifier, 5)) {
       return NextResponse.json(
         { error: "Too many submissions. Please try again later." },
         { status: 429 },
@@ -85,16 +93,16 @@ export async function POST(request: NextRequest) {
     const form = await request.formData();
     const fields = fieldsSchema.parse({
       kind: form.get("kind"),
-      title: form.get("title"),
-      subtitle: form.get("subtitle") ?? "",
-      credit: form.get("credit") ?? "",
-      creditAccount: form.get("creditAccount") ?? "",
-      body: String(form.get("body") ?? "").trim(),
+      title: withoutControlCharacters(form.get("title")),
+      subtitle: withoutControlCharacters(form.get("subtitle") ?? ""),
+      credit: withoutControlCharacters(form.get("credit") ?? ""),
+      creditAccount: withoutControlCharacters(form.get("creditAccount") ?? ""),
+      body: String(withoutControlCharacters(form.get("body") ?? "")).trim(),
       language: form.get("language"),
       consent: form.get("consent"),
       website: form.get("website") ?? "",
       provenance: form.get("provenance") ?? "own",
-      sourceUrl: form.get("sourceUrl") ?? "",
+      sourceUrl: withoutControlCharacters(form.get("sourceUrl") ?? ""),
       startedAt: form.get("startedAt"),
     });
 
@@ -204,6 +212,19 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const allowed = await consumeRateLimit(
+      "contribution-submit",
+      identifier,
+      5,
+      60 * 60 * 1000,
+    );
+    if (!allowed) {
+      return NextResponse.json(
+        { error: "Too many submissions. Please try again later." },
+        { status: 429 },
+      );
+    }
+
     const code = generateRecoveryCode();
     const db = await ensureDatabase();
     const now = new Date().toISOString();
@@ -250,8 +271,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, recoveryCode: code }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) return validationResponse(error);
-    const message =
-      error instanceof Error ? error.message : "Unable to accept the submission.";
+    // Image decoders and the storage client both raise messages written for
+    // us — libvips internals, bucket hostnames. The contributor gets written
+    // copy; the detail stays in the server log.
+    console.error("contribution submit failed", error);
+    const raw = error instanceof Error ? error.message : "";
+    const message = /Only PNG, JPEG and WebP images are accepted/.test(raw)
+      ? raw
+      : "That image could not be read. Try re-saving it as a PNG or JPEG.";
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }

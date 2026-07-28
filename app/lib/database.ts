@@ -419,6 +419,27 @@ function networkHashSecret() {
   return "local-development";
 }
 
+/**
+ * Reports whether the caller is already over its limit without spending any of
+ * the allowance. Callers that do expensive work before they know a request is
+ * valid check first and consume only once the work is actually stored, so a
+ * rejected attempt does not cost a visitor an hour of access.
+ */
+export async function rateLimitExceeded(action: string, identifier: string, limit: number) {
+  const db = await ensureDatabase();
+  const keyHash = createHmac("sha256", networkHashSecret())
+    .update(`${action}:${identifier}`)
+    .digest("hex");
+  const existing = await db.execute({
+    sql: "SELECT count, expires_at FROM rate_limits WHERE key_hash = ?",
+    args: [keyHash],
+  });
+  const row = existing.rows[0];
+  if (!row) return false;
+  if (new Date(String(row.expires_at)).getTime() <= Date.now()) return false;
+  return Number(row.count) >= limit;
+}
+
 export async function consumeRateLimit(
   action: string,
   identifier: string,

@@ -746,3 +746,221 @@ test("length limits are enforced at both ends", async () => {
     "a poem exactly at the cap is accepted",
   );
 });
+
+test("a database created before provenance existed upgrades in place", async () => {
+  // The riskiest migration in this feature: SQLite cannot alter a CHECK
+  // constraint, so the contributions table is rebuilt. This builds a database
+  // with the pre-provenance schema, fills it, and upgrades it the way a
+  // deployment will.
+  const legacyDir = await mkdtemp(path.join(tmpdir(), "tip-legacy-"));
+  const legacyPath = path.join(legacyDir, "legacy.db").replaceAll("\\", "/");
+  const legacy = createClient({ url: `file:${legacyPath}` });
+
+  await legacy.execute(`CREATE TABLE contributions (
+    id TEXT PRIMARY KEY NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('poster', 'image', 'poem', 'essay')),
+    title TEXT NOT NULL, subtitle TEXT NOT NULL DEFAULT '',
+    credit TEXT NOT NULL DEFAULT '', credit_account TEXT NOT NULL DEFAULT '',
+    body TEXT NOT NULL DEFAULT '',
+    language TEXT NOT NULL CHECK (language IN ('en', 'hi')),
+    storage_key TEXT, social_storage_key TEXT, mime_type TEXT,
+    width INTEGER, height INTEGER, byte_size INTEGER,
+    status TEXT NOT NULL DEFAULT 'pending'
+      CHECK (status IN ('pending', 'approved', 'declined', 'withdrawn')),
+    internal_notes TEXT NOT NULL DEFAULT '', content_fingerprint TEXT,
+    seeded INTEGER NOT NULL DEFAULT 0,
+    decline_reason TEXT CHECK (decline_reason IN
+      ('off_topic', 'not_own_work', 'identifying_info', 'low_quality', 'duplicate', 'other')),
+    recovery_code_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+    reviewed_by TEXT, reviewed_at TEXT, retention_eligible_at TEXT
+  )`);
+  await legacy.execute(
+    "CREATE UNIQUE INDEX contributions_recovery_code_unique ON contributions(recovery_code_hash)",
+  );
+  await legacy.execute({
+    sql: `INSERT INTO contributions
+      (id, kind, title, body, language, status, internal_notes, recovery_code_hash,
+       created_at, updated_at)
+      VALUES (?, 'poem', 'Legacy Poem', 'Written before provenance existed.', 'en',
+              'approved', 'a note from before', ?, ?, ?)`,
+    args: [
+      "11111111-1111-4111-8111-111111111111",
+      "legacy-hash",
+      "2026-01-01T00:00:00.000Z",
+      "2026-01-01T00:00:00.000Z",
+    ],
+  });
+
+  const legacyCheck = await legacy.execute(
+    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'contributions'",
+  );
+  assert.doesNotMatch(
+    String(legacyCheck.rows[0].sql),
+    /not_public_domain/,
+    "the fixture really is the old schema",
+  );
+
+  const upgrade = spawnSync(
+    process.execPath,
+    ["node_modules/tsx/dist/cli.mjs", "scripts/db-setup.ts"],
+    { encoding: "utf8", env: { ...process.env, LIBSQL_URL: `file:${legacyPath}` } },
+  );
+  assert.equal(upgrade.status, 0, upgrade.stderr || upgrade.stdout);
+
+  // A fresh client: the connection that created the fixture can hold a stale
+  // schema after the table is dropped and renamed underneath it.
+  const upgraded = createClient({ url: `file:${legacyPath}` });
+  const row = await upgraded.execute(
+    "SELECT * FROM contributions WHERE id = '11111111-1111-4111-8111-111111111111'",
+  );
+  assert.equal(row.rows.length, 1, "the pre-existing row survived the rebuild");
+  assert.equal(row.rows[0].title, "Legacy Poem");
+  assert.equal(row.rows[0].internal_notes, "a note from before", "its columns are intact");
+  assert.equal(row.rows[0].provenance, "own", "and it defaults to the contributor's own work");
+
+  const indexes = await upgraded.execute(
+    `SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'contributions'
+     AND name NOT LIKE 'sqlite_%'`,
+  );
+  const names = indexes.rows.map((index) => String(index.name));
+  for (const expected of [
+    "contributions_recovery_code_unique",
+    "contributions_status_idx",
+    "contributions_fingerprint_idx",
+    "contributions_created_idx",
+  ]) {
+    assert.ok(names.includes(expected), `${expected} was recreated after the rebuild`);
+  }
+
+  const firstRun = await upgraded.execute("SELECT count(*) AS total FROM contributions");
+  const firstRunTotal = firstRun.rows[0].total;
+
+  // The whole reason for the rebuild: the new reason must now be storable.
+  await legacy.execute(
+    `UPDATE contributions SET decline_reason = 'not_public_domain'
+     WHERE id = '11111111-1111-4111-8111-111111111111'`,
+  );
+
+  // And running it again must be a no-op rather than a second rebuild.
+  const again = spawnSync(
+    process.execPath,
+    ["node_modules/tsx/dist/cli.mjs", "scripts/db-setup.ts"],
+    { encoding: "utf8", env: { ...process.env, LIBSQL_URL: `file:${legacyPath}` } },
+  );
+  assert.equal(again.status, 0, again.stderr || again.stdout);
+  // db-setup also seeds the opening collection, so the meaningful property is
+  // that a second run changes nothing rather than that only one row exists.
+  const fresh = createClient({ url: `file:${legacyPath}` });
+  const after = await fresh.execute("SELECT count(*) AS total FROM contributions");
+  assert.equal(
+    Number(after.rows[0].total),
+    Number(firstRunTotal),
+    "a second run neither duplicates nor drops rows",
+  );
+  const legacyStillThere = await fresh.execute(
+    "SELECT count(*) AS total FROM contributions WHERE id = '11111111-1111-4111-8111-111111111111'",
+  );
+  assert.equal(Number(legacyStillThere.rows[0].total), 1, "and the pre-existing row is untouched");
+
+  await rm(legacyDir, { recursive: true, force: true });
+});
+
+
+test("withdrawal holds for writing, not just uploads", async () => {
+  const title = "Test Withdraw Then Reapprove";
+  const sent = await submit({ kind: "poem", title, body: "A poem the author later took down." });
+  assert.equal(sent.status, 201);
+  const row = await rowByTitle(title);
+  const session = await adminSession();
+  await moderate(session, { id: String(row.id), status: "approved", internalNotes: "" });
+  assert.equal((await lookup(sent.body.recoveryCode, "withdraw")).status, 200);
+
+  const reapprove = await moderate(session, {
+    id: String(row.id),
+    status: "approved",
+    internalNotes: "",
+  });
+  assert.equal(reapprove.status, 409, "a moderator cannot undo the contributor's decision");
+
+  const wall = await (await fetch(`${baseUrl}/art`)).text();
+  assert.doesNotMatch(wall, new RegExp(title));
+  const read = await fetch(`${baseUrl}/art/${row.id}`);
+  assert.equal(read.status, 404, "and the text stays off its page");
+  assert.equal((await lookup(sent.body.recoveryCode)).body?.submission?.status, "withdrawn");
+});
+
+test("every decline reason the admin panel offers can actually be saved", async () => {
+  const session = await adminSession();
+  const title = "Test PD Decline Reason";
+  const sent = await submit({
+    kind: "poem",
+    title,
+    body: "Claimed as public domain but it is not.",
+    credit: "Someone",
+    provenance: "public_domain",
+    sourceUrl: "https://example.org/not-really",
+  });
+  assert.equal(sent.status, 201);
+  const row = await rowByTitle(title);
+
+  const declined = await moderate(session, {
+    id: String(row.id),
+    status: "declined",
+    declineReason: "not_public_domain",
+    internalNotes: "",
+  });
+  assert.equal(declined.status, 200, JSON.stringify(declined.body));
+  const seen = await lookup(sent.body.recoveryCode);
+  assert.equal(seen.body?.submission?.declineReason, "not_public_domain");
+});
+
+test("an embedded NUL cannot smuggle a value past the length floors", async () => {
+  // SQLite truncates text at a NUL, so validation and storage could disagree.
+  const sent = await submit({
+    kind: "poem",
+    title: "T\u0000his Title Would Truncate",
+    body: "The first line survives.\u0000" + "and the rest of the poem follows here.",
+  });
+  assert.equal(sent.status, 201);
+  const stored = await db.execute({
+    sql: "SELECT title, body FROM contributions WHERE recovery_code_hash IS NOT NULL AND title LIKE 'This Title%'",
+  });
+  assert.equal(stored.rows.length, 1, "the control character is stripped, not stored");
+  assert.equal(String(stored.rows[0].title), "This Title Would Truncate");
+  assert.match(String(stored.rows[0].body), /and the rest of the poem follows here\./,
+    "the whole body survives rather than being cut at the NUL");
+
+  const emptied = await submit({ kind: "poem", title: "\u0000A", body: "A valid body here." });
+  assert.equal(emptied.status, 400, "a title that is only a control character plus one is refused");
+});
+
+test("a rejected attempt does not cost a visitor their hourly allowance", async () => {
+  await resetRateLimits();
+  // Five refusals: wrong format, so nothing is ever stored.
+  const gif = Buffer.from("R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==", "base64");
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const rejected = await submit(
+      { kind: "image", title: `Test Rejected ${attempt}` },
+      { bytes: gif, type: "image/png", name: "not-really.png" },
+    );
+    assert.ok(rejected.status >= 400, "the file is refused");
+  }
+  const valid = await submit({ kind: "poem", title: "Test After Rejections", body: "A valid poem." });
+  assert.equal(valid.status, 201, "the visitor is not locked out by attempts that stored nothing");
+});
+
+test("a decoder failure is explained rather than dumped on the contributor", async () => {
+  const truncated = Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    Buffer.alloc(64, 7),
+  ]);
+  const response = await submit(
+    { kind: "image", title: "Test Broken PNG" },
+    { bytes: truncated, type: "image/png", name: "broken.png" },
+  );
+  assert.ok(response.status >= 400);
+  const message = String(response.body?.error ?? "");
+  assert.doesNotMatch(message, /vips|libpng|buffer|Input image/i, "no decoder internals leak");
+  assert.match(message, /could not be read|PNG or JPEG/i, "the contributor gets written copy");
+});
