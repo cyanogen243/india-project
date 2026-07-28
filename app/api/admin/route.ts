@@ -282,6 +282,11 @@ export async function POST(request: NextRequest) {
           id: z.string().uuid(),
           status: z.enum(["pending", "approved", "declined", "withdrawn"]),
           internalNotes: z.string().max(4000),
+          title: z.string().trim().min(2).max(120).optional(),
+          subtitle: z.string().trim().max(120).optional(),
+          credit: z.string().trim().max(80).optional(),
+          creditAccount: z.string().trim().max(120).optional(),
+          body: z.string().max(40000).optional(),
           declineReason: z
             .enum([
               "off_topic",
@@ -302,7 +307,8 @@ export async function POST(request: NextRequest) {
         );
       }
       const existing = await db.execute({
-        sql: "SELECT kind, status, seeded FROM contributions WHERE id = ?",
+        sql: `SELECT kind, status, seeded, title, subtitle, credit,
+                     credit_account, body FROM contributions WHERE id = ?`,
         args: [input.id],
       });
       const previous = existing.rows[0];
@@ -317,6 +323,7 @@ export async function POST(request: NextRequest) {
       await db.execute({
         sql: `UPDATE contributions
               SET status = ?, internal_notes = ?, decline_reason = ?,
+                  title = ?, subtitle = ?, credit = ?, credit_account = ?, body = ?,
                   reviewed_by = ?, reviewed_at = ?, updated_at = ?,
                   retention_eligible_at = ?
               WHERE id = ?`,
@@ -324,6 +331,11 @@ export async function POST(request: NextRequest) {
           input.status,
           input.internalNotes,
           input.status === "declined" ? input.declineReason : null,
+          input.title ?? String(previous.title),
+          input.subtitle ?? String(previous.subtitle),
+          input.credit ?? String(previous.credit),
+          input.creditAccount ?? String(previous.credit_account),
+          input.body ?? String(previous.body),
           user.id,
           now.toISOString(),
           now.toISOString(),
@@ -335,36 +347,6 @@ export async function POST(request: NextRequest) {
         status: input.status,
       });
 
-      // Geometric seed posters exist only until real ones arrive: approving a
-      // real poster permanently removes the oldest remaining poster seed.
-      // Other kinds keep their seeded content — the Salt March photographs and
-      // public-domain writing are collection, not placeholder. Firing only on
-      // the transition into approved stops a status toggle from burning
-      // through several seeds.
-      if (
-        input.status === "approved" &&
-        previous.status !== "approved" &&
-        previous.kind === "poster" &&
-        Number(previous.seeded) !== 1
-      ) {
-        const seed = await db.execute(
-          `SELECT id, storage_key, social_storage_key FROM contributions
-           WHERE seeded = 1 AND kind = 'poster' ORDER BY created_at ASC LIMIT 1`,
-        );
-        const row = seed.rows[0];
-        if (row) {
-          for (const key of [row.storage_key, row.social_storage_key]) {
-            if (typeof key === "string" && key) await deleteObject(key);
-          }
-          await db.execute({
-            sql: "DELETE FROM contributions WHERE id = ?",
-            args: [row.id],
-          });
-          await writeAuditEvent(user.id, "seed_retired", "contribution", String(row.id), {
-            replacedBy: input.id,
-          });
-        }
-      }
       return NextResponse.json({ ok: true });
     }
 

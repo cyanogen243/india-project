@@ -13,9 +13,9 @@ import { putObject } from "../app/lib/storage";
  * the production database before launch:
  *   LIBSQL_URL=libsql://... LIBSQL_AUTH_TOKEN=... ART_S3_...=... npm run seed:art
  *
- * Only the geometric posters are placeholders — approving a real poster
- * retires the oldest one. Everything else is permanent collection:
- * public-domain photographs and writing, with sources noted per item.
+ * The geometric posters are placeholders admins remove by hand as real
+ * posters arrive. Everything else is permanent collection: public-domain
+ * photographs and writing, with sources noted per item.
  */
 
 type SeedItem = {
@@ -30,7 +30,7 @@ type SeedItem = {
 };
 
 const SEEDS: SeedItem[] = [
-  // Geometric placeholder posters — retire one-for-one as real posters arrive.
+  // Geometric placeholder posters — admins remove these by hand as real ones arrive.
   { id: "5eed0001-0000-4000-8000-000000000001", kind: "poster", title: "Sunrise", credit: "The India Project", language: "en", file: "poster-sunrise.png" },
   { id: "5eed0001-0000-4000-8000-000000000002", kind: "poster", title: "Stripes", credit: "The India Project", language: "en", file: "poster-stripes.png" },
   { id: "5eed0001-0000-4000-8000-000000000003", kind: "poster", title: "Peaks", credit: "The India Project", language: "en", file: "poster-peaks.png" },
@@ -63,14 +63,15 @@ export async function seedContributions() {
   const now = new Date().toISOString();
 
   for (const seed of SEEDS) {
-    // Tombstone check: a seed that was retired (deleted) must not be recreated
-    // by the next run. Retirement writes a seed_retired audit event.
-    const retired = await db.execute({
+    // Tombstone check: a seed an admin has deleted must not be recreated by
+    // the next run. Deletion writes an audit event; its presence is the
+    // permanent record that this seed was removed on purpose.
+    const removed = await db.execute({
       sql: `SELECT 1 FROM audit_events
-            WHERE action = 'seed_retired' AND entity_id = ? LIMIT 1`,
+            WHERE action IN ('deleted', 'seed_retired') AND entity_id = ? LIMIT 1`,
       args: [seed.id],
     });
-    if (retired.rows.length > 0) continue;
+    if (removed.rows.length > 0) continue;
 
     const existing = await db.execute({
       sql: "SELECT 1 FROM contributions WHERE id = ?",

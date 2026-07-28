@@ -399,6 +399,8 @@ export function AdminApp() {
       {tab === "contributions" && (
         <ContributionWorkspace
           contributions={data.contributions}
+          csrfToken={data.user.csrfToken}
+          onRefresh={refresh}
           mutate={mutate}
           setError={setError}
           setNotice={setNotice}
@@ -700,11 +702,15 @@ function VolunteerCard({
 
 function ContributionWorkspace({
   contributions,
+  csrfToken,
+  onRefresh,
   mutate,
   setError,
   setNotice,
 }: {
   contributions: Contribution[];
+  csrfToken: string;
+  onRefresh: () => Promise<void>;
   mutate: (body: Record<string, unknown>) => Promise<unknown>;
   setError: (value: string) => void;
   setNotice: (value: string) => void;
@@ -733,12 +739,20 @@ function ContributionWorkspace({
           </select>
         </div>
       </div>
+      <ContributionAddForm
+        csrfToken={csrfToken}
+        onDone={async () => {
+          await onRefresh();
+          setNotice("Added to the gallery.");
+        }}
+        setError={setError}
+      />
       <div className="volunteer-admin-grid">
         {filtered.map((contribution) => (
           <ContributionCard
             key={`${contribution.id}-${contribution.status}`}
             contribution={contribution}
-            onSave={async (nextStatus, internalNotes, declineReason) => {
+            onSave={async (nextStatus, internalNotes, declineReason, fields) => {
               try {
                 await mutate({
                   action: "contribution_update",
@@ -746,6 +760,7 @@ function ContributionWorkspace({
                   status: nextStatus,
                   internalNotes,
                   declineReason,
+                  ...fields,
                 });
                 setNotice("Contribution updated.");
               } catch (caught) {
@@ -771,26 +786,37 @@ function ContributionCard({
   onDelete,
 }: {
   contribution: Contribution;
-  onSave: (status: string, notes: string, declineReason: string | null) => Promise<void>;
+  onSave: (
+    status: string,
+    notes: string,
+    declineReason: string | null,
+    fields: Record<string, string>,
+  ) => Promise<void>;
   onDelete: () => Promise<void>;
 }) {
   const [status, setStatus] = useState(contribution.status);
   const [notes, setNotes] = useState(contribution.internalNotes);
   const [reason, setReason] = useState(contribution.declineReason ?? "off_topic");
+  const [title, setTitle] = useState(contribution.title);
+  const [subtitle, setSubtitle] = useState(contribution.subtitle);
+  const [credit, setCredit] = useState(contribution.credit);
+  const [creditAccount, setCreditAccount] = useState(contribution.creditAccount);
+  const [body, setBody] = useState(contribution.body);
+  const isTextKind = contribution.kind === "poem" || contribution.kind === "essay";
   return (
     <article className="volunteer-admin-card">
       <div>
         <span className={`badge badge-${status}`}>{status}</span>
         <small>{new Date(contribution.createdAt).toLocaleString()}</small>
       </div>
-      <h3>{contribution.title}</h3>
-      {contribution.subtitle && <p><em>{contribution.subtitle}</em></p>}
       <p>
         <strong>{contribution.kind}</strong>
         {contribution.seeded ? " · seed" : ""}
-        {" · "}
-        {contribution.creditAccount || contribution.credit || "Anonymous"}
       </p>
+      <label>Title<input value={title} onChange={(event) => setTitle(event.target.value)} /></label>
+      <label>Subtitle<input value={subtitle} onChange={(event) => setSubtitle(event.target.value)} /></label>
+      <label>Credit (alias)<input value={credit} onChange={(event) => setCredit(event.target.value)} /></label>
+      <label>Credit account<input value={creditAccount} onChange={(event) => setCreditAccount(event.target.value)} /></label>
       {(contribution.kind === "poster" || contribution.kind === "image") && contribution.storageKey && (
         <Image
           src={`/api/contributions/${contribution.id}/file?variant=social`}
@@ -801,8 +827,11 @@ function ContributionCard({
           style={{ width: "100%", height: "auto", borderRadius: "0.5rem" }}
         />
       )}
-      {(contribution.kind === "poem" || contribution.kind === "essay") && (
-        <p style={{ whiteSpace: "pre-wrap" }}>{contribution.body}</p>
+      {isTextKind && (
+        <label>
+          Text
+          <textarea rows={6} value={body} onChange={(event) => setBody(event.target.value)} />
+        </label>
       )}
       {contribution.width && contribution.height && (
         <small>{contribution.width} × {contribution.height} px</small>
@@ -830,13 +859,92 @@ function ContributionCard({
       <div className="admin-actions">
         <button
           className="button button-primary"
-          onClick={() => void onSave(status, notes, status === "declined" ? reason : null)}
+          onClick={() =>
+            void onSave(status, notes, status === "declined" ? reason : null, {
+              title,
+              subtitle,
+              credit,
+              creditAccount,
+              ...(isTextKind ? { body } : {}),
+            })
+          }
         >
           Save
         </button>
         <button className="button button-danger" onClick={() => void onDelete()}>Delete</button>
       </div>
     </article>
+  );
+}
+
+function ContributionAddForm({
+  csrfToken,
+  onDone,
+  setError,
+}: {
+  csrfToken: string;
+  onDone: () => Promise<void>;
+  setError: (value: string) => void;
+}) {
+  const [kind, setKind] = useState("poster");
+  const [busy, setBusy] = useState(false);
+  const isFileKind = kind === "poster" || kind === "image";
+  return (
+    <details className="admin-help">
+      <summary>Add directly to the gallery</summary>
+      <form
+        className="admin-create-user"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          const formElement = event.currentTarget;
+          const form = new FormData(formElement);
+          form.set("kind", kind);
+          setBusy(true);
+          try {
+            const response = await fetch("/api/admin/contributions", {
+              method: "POST",
+              headers: { "x-tip-csrf": csrfToken },
+              body: form,
+            });
+            const value = await response.json();
+            if (!response.ok) throw new Error(value.error ?? "Unable to add");
+            formElement.reset();
+            await onDone();
+          } catch (caught) {
+            setError(caught instanceof Error ? caught.message : "Unable to add");
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <label>Kind
+          <select value={kind} onChange={(event) => setKind(event.target.value)}>
+            <option value="poster">poster</option>
+            <option value="image">image</option>
+            <option value="poem">poem</option>
+            <option value="essay">essay</option>
+          </select>
+        </label>
+        <label>Language
+          <select name="language" defaultValue="en"><option>en</option><option>hi</option></select>
+        </label>
+        <label>Status
+          <select name="status" defaultValue="approved"><option>approved</option><option>pending</option></select>
+        </label>
+        <label>Title<input name="title" required minLength={2} maxLength={120} /></label>
+        <label>Subtitle<input name="subtitle" maxLength={120} /></label>
+        <label>Credit (alias)<input name="credit" maxLength={80} /></label>
+        <label>Credit account<input name="creditAccount" maxLength={120} /></label>
+        {isFileKind ? (
+          <label>Image file<input type="file" name="file" accept="image/png,image/jpeg,image/webp" required /></label>
+        ) : (
+          <label>Text<textarea name="body" rows={6} required /></label>
+        )}
+        <button className="button button-primary" type="submit" disabled={busy}>
+          {busy ? "Adding…" : "Add to gallery"}
+        </button>
+      </form>
+    </details>
   );
 }
 
