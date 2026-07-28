@@ -574,6 +574,34 @@ dd {
   background: #f2e8c9;
 }
 
+/* Lifecycle statuses — contributions (pending/approved/declined/withdrawn)
+   and volunteers (new/contacted/accepted/declined/archived) — share the
+   semantic colours of the record badges above: waiting or in progress =
+   amber, accepted = green, refused = red, closed = quiet. */
+.badge-pending,
+.badge-new,
+.badge-contacted {
+  color: #765105;
+  background: #f2e8c9;
+}
+
+.badge-approved,
+.badge-accepted {
+  color: var(--green);
+  background: #e0eee8;
+}
+
+.badge-declined {
+  color: var(--red);
+  background: var(--red-soft);
+}
+
+.badge-withdrawn,
+.badge-archived {
+  color: var(--ink-soft);
+  background: #eadfce;
+}
+
 .stale {
   color: var(--red);
   font-size: 0.72rem;
