@@ -1126,3 +1126,38 @@ test("a retained row keeps its original deletion date when edited", async () => 
     "editing notes does not push the deletion date out by another 180 days",
   );
 });
+
+test("schema refusals follow the language of the page too", async () => {
+  // Not just the hand-written rules: the field-level messages come from the
+  // schema and were English-only, so a Hindi form gave a Hindi UI and an
+  // English correction.
+  const form = humanTimings(new FormData());
+  form.set("kind", "poem");
+  form.set("title", "Test Hindi Field Error");
+  form.set("body", "एक मान्य कविता।");
+  form.set("language", "hi");
+  form.set("creditAccount", "@मेरा हैंडल");
+  const response = await fetch(`${baseUrl}/api/contributions`, {
+    method: "POST",
+    body: form,
+    headers: { referer: `${baseUrl}/hi/contribute` },
+  });
+  assert.equal(response.status, 400);
+  const body = await response.json();
+  assert.match(String(body.error), /[ऀ-ॿ]/, "the field message is in Hindi");
+  assert.equal(body.field, "creditAccount", "and still names the field to fix");
+
+  const english = await fetch(`${baseUrl}/api/contributions`, {
+    method: "POST",
+    body: (() => {
+      const f = humanTimings(new FormData());
+      f.set("kind", "poem");
+      f.set("title", "Test English Field Error");
+      f.set("body", "A valid poem.");
+      f.set("creditAccount", "@my handle");
+      return f;
+    })(),
+    headers: { referer: `${baseUrl}/contribute` },
+  });
+  assert.match(String((await english.json()).error), /without spaces/, "English is unchanged");
+});

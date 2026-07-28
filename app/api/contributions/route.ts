@@ -37,54 +37,6 @@ const fieldsSchema = z.object({
   startedAt: z.coerce.number().int().positive(),
 });
 
-function validationResponse(error: z.ZodError) {
-  const field = String(error.issues[0]?.path[0] ?? "");
-  const messages: Record<string, string> = {
-    kind: "Choose what you are sharing.",
-    title: "Title must be between 2 and 120 characters.",
-    subtitle: "Subtitle must be 120 characters or fewer.",
-    credit: "Name or alias must be 80 characters or fewer.",
-    creditAccount: "Enter a handle or profile link without spaces.",
-    body: "That text is too long.",
-    consent: "Confirmation is required before submitting.",
-  };
-  return NextResponse.json(
-    {
-      error: messages[field] ?? "Please check every required field.",
-      ...(field in messages ? { field } : {}),
-    },
-    { status: 400 },
-  );
-}
-
-function remoteIdentifier(request: NextRequest) {
-  // Cloudflare sets CF-Connecting-IP itself and appends the client to any
-  // inbound X-Forwarded-For, so trusting the first XFF element lets a caller
-  // choose their own rate-limit bucket. Prefer the header the edge controls;
-  // fall back to the last XFF element, which is the one the nearest proxy
-  // appended rather than anything the client sent.
-  const forwarded = request.headers
-    .get("x-forwarded-for")
-    ?.split(",")
-    .map((part) => part.trim())
-    .filter(Boolean);
-  return (
-    request.headers.get("cf-connecting-ip") ||
-    forwarded?.[forwarded.length - 1] ||
-    "unknown"
-  );
-}
-
-// SQLite stores text up to the first NUL byte, so a value that passes
-// validation can land in the row truncated — short enough to slip under the
-// length floors, or empty. Control characters have no place in a title or a
-// poem anyway; newlines and tabs stay.
-function withoutControlCharacters(value: unknown) {
-  return typeof value === "string"
-    ? value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
-    : value;
-}
-
 // The form is bilingual but every rejection it renders comes from here, so a
 // Hindi contributor was shown Hindi UI and an English refusal. Messages are
 // chosen by the language the submission itself declares.
@@ -123,6 +75,84 @@ const MESSAGES = {
     hi: "यह तस्वीर पढ़ी नहीं जा सकी। इसे PNG या JPEG में दोबारा सहेजकर भेजें।",
   },
 } satisfies Record<string, Bilingual>;
+
+function validationResponse(error: z.ZodError, language: string) {
+  const field = String(error.issues[0]?.path[0] ?? "");
+  // Hand-written refusals below were made bilingual; these come from the
+  // schema and were not, so a Hindi contributor filling a Hindi form was told
+  // in English which field to fix.
+  const messages: Record<string, Bilingual> = {
+    kind: {
+      en: "Choose what you are sharing.",
+      hi: "आप क्या साझा कर रहे हैं, यह चुनें।",
+    },
+    title: {
+      en: "Title must be between 2 and 120 characters.",
+      hi: "शीर्षक 2 से 120 अक्षरों के बीच होना चाहिए।",
+    },
+    subtitle: {
+      en: "Subtitle must be 120 characters or fewer.",
+      hi: "उपशीर्षक 120 अक्षरों से अधिक नहीं हो सकता।",
+    },
+    credit: {
+      en: "Name or alias must be 80 characters or fewer.",
+      hi: "नाम या उपनाम 80 अक्षरों से अधिक नहीं हो सकता।",
+    },
+    creditAccount: {
+      en: "Enter a handle or profile link without spaces.",
+      hi: "बिना जगह वाला हैंडल या प्रोफ़ाइल लिंक डालें।",
+    },
+    sourceUrl: {
+      en: "Link where this was published, starting with https://",
+      hi: "यह कहाँ प्रकाशित है उसका लिंक दें, जो https:// से शुरू हो।",
+    },
+    body: {
+      en: "That text is too long.",
+      hi: "यह पाठ बहुत लंबा है।",
+    },
+    consent: {
+      en: "Tick the box to confirm the terms.",
+      hi: "शर्तें स्वीकार करने के लिए बॉक्स पर निशान लगाएँ।",
+    },
+  };
+  const fallback: Bilingual = {
+    en: "Please check every required field.",
+    hi: "कृपया हर ज़रूरी जगह भरें।",
+  };
+  return NextResponse.json(
+    { error: say(language, messages[field] ?? fallback), field },
+    { status: 400 },
+  );
+}
+
+
+function remoteIdentifier(request: NextRequest) {
+  // Cloudflare sets CF-Connecting-IP itself and appends the client to any
+  // inbound X-Forwarded-For, so trusting the first XFF element lets a caller
+  // choose their own rate-limit bucket. Prefer the header the edge controls;
+  // fall back to the last XFF element, which is the one the nearest proxy
+  // appended rather than anything the client sent.
+  const forwarded = request.headers
+    .get("x-forwarded-for")
+    ?.split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return (
+    request.headers.get("cf-connecting-ip") ||
+    forwarded?.[forwarded.length - 1] ||
+    "unknown"
+  );
+}
+
+// SQLite stores text up to the first NUL byte, so a value that passes
+// validation can land in the row truncated — short enough to slip under the
+// length floors, or empty. Control characters have no place in a title or a
+// poem anyway; newlines and tabs stay.
+function withoutControlCharacters(value: unknown) {
+  return typeof value === "string"
+    ? value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+    : value;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -321,7 +351,12 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ok: true, recoveryCode: code }, { status: 201 });
   } catch (error) {
-    if (error instanceof z.ZodError) return validationResponse(error);
+    if (error instanceof z.ZodError) {
+      return validationResponse(
+        error,
+        /\/hi(\/|$)/.test(request.headers.get("referer") ?? "") ? "hi" : "en",
+      );
+    }
     // Image decoders and the storage client both raise messages written for
     // us — libvips internals, bucket hostnames. The contributor gets written
     // copy; the detail stays in the server log.

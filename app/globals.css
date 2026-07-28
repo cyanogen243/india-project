@@ -2563,12 +2563,17 @@ button.gallery-art {
 .art-lightbox-close {
   position: absolute;
   top: 0.4rem;
-  right: 0.6rem;
+  right: 0.4rem;
+  /* Meets the 44px touch target; it was 33×29 on a phone. */
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: 0;
-  background: rgba(255, 250, 241, 0.85);
+  background: rgba(255, 250, 241, 0.9);
   font-size: 1.6rem;
   line-height: 1;
-  padding: 0.1rem 0.5rem;
   cursor: pointer;
 }
 
@@ -2597,6 +2602,15 @@ button.gallery-art {
 
 .art-lightbox-licence {
   color: var(--ink-soft);
+}
+
+.admin-unsaved {
+  margin-left: 0.5rem;
+  color: #765105;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .admin-placeholder-note {

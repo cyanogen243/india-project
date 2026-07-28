@@ -838,7 +838,12 @@ function ContributionCard({
   return (
     <article className="volunteer-admin-card">
       <div>
-        <span className={`badge badge-${status}`}>{status}</span>
+        {/* The stored status, not the dropdown: showing the unsaved value made
+            an unmade — or failed — save read as done. */}
+        <span className={`badge badge-${contribution.status}`}>{contribution.status}</span>
+        {status !== contribution.status && (
+          <span className="admin-unsaved">unsaved: {status}</span>
+        )}
         <small>{new Date(contribution.createdAt).toLocaleString("en-IN")}</small>
       </div>
       <p>
@@ -894,13 +899,15 @@ function ContributionCard({
           Reason shown to the contributor
           <select value={reason} onChange={(event) => setReason(event.target.value)}>
             {Object.entries(declineReasons)
-              .filter(([value]) =>
-                value === "not_own_work"
-                  ? contribution.provenance !== "public_domain"
-                  : value === "not_public_domain"
-                    ? contribution.provenance === "public_domain"
-                    : true,
-              )
+              // A contributor reads this verbatim, so only offer reasons that
+              // can be true of what they actually sent: no "resolution too
+              // low" on a poem, and the provenance pair follows the claim.
+              .filter(([value]) => {
+                if (value === "not_own_work") return contribution.provenance !== "public_domain";
+                if (value === "not_public_domain") return contribution.provenance === "public_domain";
+                if (value === "low_quality") return !isTextKind;
+                return true;
+              })
               .map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
             ))}
