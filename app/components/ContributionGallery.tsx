@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import type { Language } from "@/app/lib/content";
@@ -9,6 +9,12 @@ import type { PublicContribution } from "@/app/lib/database";
 // A poem at or under this length is shown whole; longer poems cut here and
 // hand off to their read page. Mirrors POEM_TILE_LIMIT server-side.
 const POEM_TILE_LIMIT = 600;
+
+// Character count under-measures Devanagari (each visible letter is several
+// codepoints), so a poem also cuts by height: anything over POEM_TILE_LINES
+// lines shows the first POEM_TEASER_LINES — a clean break for couplet forms.
+const POEM_TILE_LINES = 12;
+const POEM_TEASER_LINES = 8;
 
 // Essay tiles open with the first words of the piece, per the approved mockup.
 // Paragraph breaks collapse to an em dash so a salutation reads inline
@@ -112,6 +118,18 @@ export function ContributionGallery({
   const [filter, setFilter] = useState<"all" | PublicContribution["kind"]>("all");
   const visible = items.filter((item) => filter === "all" || item.kind === filter);
 
+  const [openPoem, setOpenPoem] = useState<PublicContribution | null>(null);
+  const poemDialog = useRef<HTMLDialogElement>(null);
+
+  // The native dialog brings focus trapping, Esc and ::backdrop for free;
+  // state only drives it open and closed.
+  useEffect(() => {
+    const dialog = poemDialog.current;
+    if (!dialog) return;
+    if (openPoem && !dialog.open) dialog.showModal();
+    if (!openPoem && dialog.open) dialog.close();
+  }, [openPoem]);
+
   const filters = [
     ["all", hindi ? "सब" : "All"],
     ["poster", hindi ? "पोस्टर" : "Posters"],
@@ -156,7 +174,10 @@ export function ContributionGallery({
           {visible.map((item) => {
             const fileUrl = `/api/contributions/${item.id}/file`;
             const isFile = item.kind === "poster" || item.kind === "image";
-            const poemIsCut = item.kind === "poem" && item.body.length > POEM_TILE_LIMIT;
+            const poemLines = item.kind === "poem" ? item.body.split("\n") : [];
+            const poemIsCut =
+              item.kind === "poem" &&
+              (item.body.length > POEM_TILE_LIMIT || poemLines.length > POEM_TILE_LINES);
             return (
               <article key={item.id} className="gallery-card" data-kind={item.kind}>
                 {isFile && (
@@ -176,10 +197,24 @@ export function ContributionGallery({
                     <h3>{item.title}</h3>
                     {item.subtitle && <p className="tile-sub">{item.subtitle}</p>}
                     <p className={poemIsCut ? "tile-teaser" : undefined}>
-                      {poemIsCut ? item.body.slice(0, POEM_TILE_LIMIT) : item.body}
+                      {poemIsCut
+                        ? poemLines.slice(0, POEM_TEASER_LINES).join("\n").slice(0, POEM_TILE_LIMIT)
+                        : item.body}
                     </p>
                     {poemIsCut && (
-                      <Link className="tile-more" href={readHref(item.id)}>
+                      <Link
+                        className="tile-more"
+                        href={readHref(item.id)}
+                        onClick={(event) => {
+                          // A plain click reads the poem in place; modified
+                          // clicks keep their open-elsewhere meaning and use
+                          // the poem's own page.
+                          if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+                            return;
+                          event.preventDefault();
+                          setOpenPoem(item);
+                        }}
+                      >
                         {hindi ? "पूरी कविता पढ़ें →" : "Read the full poem →"}
                       </Link>
                     )}
@@ -229,6 +264,42 @@ export function ContributionGallery({
           })}
         </div>
       )}
+
+      <dialog
+        ref={poemDialog}
+        className="poem-modal"
+        onClose={() => setOpenPoem(null)}
+        onClick={(event) => {
+          if (event.target === poemDialog.current) poemDialog.current?.close();
+        }}
+      >
+        {openPoem && (
+          <div
+            className="gallery-tile poem-modal-panel"
+            style={{ background: tileColour(openPoem.id) }}
+          >
+            <button
+              type="button"
+              className="poem-modal-close"
+              onClick={() => poemDialog.current?.close()}
+              aria-label={hindi ? "बंद करें" : "Close"}
+            >
+              ×
+            </button>
+            <h3>{openPoem.title}</h3>
+            {openPoem.subtitle && <p className="tile-sub">{openPoem.subtitle}</p>}
+            <p>{openPoem.body}</p>
+            <div className="poem-modal-foot">
+              <small>
+                <Credit item={openPoem} hindi={hindi} /> · CC BY-NC-SA 4.0
+              </small>
+              <Link href={readHref(openPoem.id)} onClick={() => poemDialog.current?.close()}>
+                {hindi ? "इसका अपना पन्ना →" : "Open its own page →"}
+              </Link>
+            </div>
+          </div>
+        )}
+      </dialog>
     </>
   );
 }

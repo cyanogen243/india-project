@@ -2840,9 +2840,63 @@ footer p {
   color: var(--red);
 }
 
+/* Poem modal: a plain click on "Read the full poem" reads it in place over
+   the wall. The poem's own page stays for modified clicks, the footer link
+   and direct visits. */
+.poem-modal {
+  border: 0;
+  padding: 0;
+  background: none;
+  width: min(30rem, 92vw);
+}
+
+.poem-modal::backdrop {
+  background: rgba(11, 11, 11, 0.55);
+}
+
+.poem-modal-panel {
+  position: relative;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 8px 8px 0 rgba(11, 11, 11, 0.4);
+}
+
+.poem-modal-close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.6rem;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: 1.5rem;
+  line-height: 1;
+  padding: 0.2rem 0.45rem;
+  cursor: pointer;
+}
+
+.poem-modal-close:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.poem-modal-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1rem;
+  justify-content: space-between;
+  align-items: baseline;
+  border-top: 1px solid rgba(255, 250, 241, 0.35);
+  padding-top: 0.8rem;
+}
+
+.poem-modal-foot a {
+  color: inherit;
+}
+
 /* Read page for full poems and essays */
 .read-page {
   max-width: 44rem;
+  margin-inline: auto;
   display: grid;
   gap: 1rem;
 }
