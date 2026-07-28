@@ -134,11 +134,18 @@ before(async () => {
     SESSION_SECRET: "test-session-secret-not-for-production",
     RATE_LIMIT_SECRET: "test-rate-limit-secret-not-for-production",
     FEED_SIGNING_PRIVATE_KEY: privateKey.export({ format: "pem", type: "pkcs8" }).toString(),
+    // These run against a production build with no bucket on purpose; the
+    // driver refuses that combination unless it is asked for explicitly.
+    ART_S3_ALLOW_LOCAL_DISK: "yes",
   };
-  delete testEnv.ART_S3_ENDPOINT;
-  delete testEnv.ART_S3_BUCKET;
-  delete testEnv.ART_S3_ACCESS_KEY_ID;
-  delete testEnv.ART_S3_SECRET_ACCESS_KEY;
+  // Set empty rather than deleted: Next loads .env.local itself, and that file
+  // points at a local Garage bucket. Deleting these let the real bucket back
+  // in, so the suite silently depended on Garage running.
+  testEnv.ART_S3_ENDPOINT = "";
+  testEnv.ART_S3_BUCKET = "";
+  testEnv.ART_S3_ACCESS_KEY_ID = "";
+  testEnv.ART_S3_SECRET_ACCESS_KEY = "";
+  testEnv.ART_S3_REGION = "";
 
   const bootstrap = spawnSync(
     process.execPath,
@@ -1160,4 +1167,34 @@ test("schema refusals follow the language of the page too", async () => {
     headers: { referer: `${baseUrl}/contribute` },
   });
   assert.match(String((await english.json()).error), /without spaces/, "English is unchanged");
+});
+
+test("a half-configured bucket is refused rather than half-used", async () => {
+  // Three of the four set is nearly always a typo or a half-copied credential
+  // set; falling back to disk would hide it until files started disappearing.
+  const probe = spawnSync(
+    process.execPath,
+    [
+      "node_modules/tsx/dist/cli.mjs",
+      "-e",
+      "import('./app/lib/storage.ts').then((m) => m.putObject('11111111-1111-4111-8111-111111111111.png', new Uint8Array([1]), 'image/png')).catch((error) => { console.error(error.message); process.exit(3); })",
+    ],
+    {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        LIBSQL_URL: `file:${testDbPath}`,
+        ART_S3_ENDPOINT: "https://example.invalid",
+        ART_S3_BUCKET: "a-bucket",
+        ART_S3_ACCESS_KEY_ID: "an-id",
+        ART_S3_SECRET_ACCESS_KEY: "",
+      },
+    },
+  );
+  assert.equal(probe.status, 3, probe.stdout || probe.stderr);
+  assert.match(
+    probe.stderr,
+    /half configured|ART_S3_SECRET_ACCESS_KEY/,
+    "the missing variable is named",
+  );
 });

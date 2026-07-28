@@ -114,14 +114,20 @@ let ready: Promise<Client> | undefined;
 
 export function getDatabaseClient() {
   if (!client) {
+    const url = process.env.LIBSQL_URL ?? process.env.TURSO_DATABASE_URL;
+    // The local-file default is a development convenience. A serverless host
+    // discards its filesystem between requests, so falling back to it in
+    // production would accept submissions into a database that disappears —
+    // and would keep doing so silently.
+    if (!url && process.env.NODE_ENV === "production") {
+      throw new Error(
+        "LIBSQL_URL (or TURSO_DATABASE_URL) must be set in production. " +
+          "Without it the app would write to a filesystem that does not persist.",
+      );
+    }
     client = createClient({
-      url:
-        process.env.LIBSQL_URL ??
-        process.env.TURSO_DATABASE_URL ??
-        "file:./data/the-india-project.db",
-      authToken:
-        process.env.LIBSQL_AUTH_TOKEN ??
-        process.env.TURSO_AUTH_TOKEN,
+      url: url ?? "file:./data/the-india-project.db",
+      authToken: process.env.LIBSQL_AUTH_TOKEN ?? process.env.TURSO_AUTH_TOKEN,
     });
   }
   return client;

@@ -40,11 +40,47 @@ function localPath(key: string) {
 }
 
 function s3Config() {
-  const endpoint = process.env.ART_S3_ENDPOINT;
-  const bucket = process.env.ART_S3_BUCKET;
-  const accessKeyId = process.env.ART_S3_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.ART_S3_SECRET_ACCESS_KEY;
-  if (!endpoint || !bucket || !accessKeyId || !secretAccessKey) return null;
+  const required = {
+    ART_S3_ENDPOINT: process.env.ART_S3_ENDPOINT,
+    ART_S3_BUCKET: process.env.ART_S3_BUCKET,
+    ART_S3_ACCESS_KEY_ID: process.env.ART_S3_ACCESS_KEY_ID,
+    ART_S3_SECRET_ACCESS_KEY: process.env.ART_S3_SECRET_ACCESS_KEY,
+  };
+  const missing = Object.entries(required)
+    .filter(([, value]) => !value)
+    .map(([name]) => name);
+
+  if (missing.length > 0) {
+    // Fail loudly rather than fall back. The disk driver cannot work on a
+    // serverless host — the filesystem is discarded between requests — so a
+    // silent fallback means uploads that appear to succeed and are gone by the
+    // next request, with the database still pointing at them.
+    // The escape hatch is explicit and opt-in so it can never be reached by
+    // accident: the automated tests exercise a production build with no bucket
+    // on purpose. A deployment that sets this has chosen to lose uploads.
+    const diskAllowed = process.env.ART_S3_ALLOW_LOCAL_DISK === "yes";
+    if (process.env.NODE_ENV === "production" && !diskAllowed) {
+      throw new Error(
+        `Object storage is not configured: ${missing.join(", ")} must be set. ` +
+          "Contribution files cannot be stored on the local filesystem in production. " +
+          "Set ART_S3_ALLOW_LOCAL_DISK=yes only if losing them is acceptable.",
+      );
+    }
+    // A partial configuration is a mistake in any environment: it almost
+    // always means a typo or a half-copied set of credentials.
+    if (missing.length < Object.keys(required).length) {
+      throw new Error(
+        `Object storage is half configured: ${missing.join(", ")} missing. ` +
+          "Set all four ART_S3_* variables, or none to use local disk in development.",
+      );
+    }
+    return null;
+  }
+
+  const { ART_S3_ENDPOINT: endpoint, ART_S3_BUCKET: bucket } = required;
+  const accessKeyId = required.ART_S3_ACCESS_KEY_ID as string;
+  const secretAccessKey = required.ART_S3_SECRET_ACCESS_KEY as string;
+  if (!endpoint || !bucket) return null;
   return {
     endpoint,
     bucket,
