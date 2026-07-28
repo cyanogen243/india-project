@@ -170,9 +170,11 @@ after(async () => {
 // The route consumes the 5-per-hour limit on every request, deliberately
 // before the body is parsed. Each scenario below is a separate visitor, so the
 // counter is reset rather than making the tests share one visitor's budget.
-beforeEach(async () => {
+async function resetRateLimits() {
   if (db) await db.execute("DELETE FROM rate_limits");
-});
+}
+
+beforeEach(resetRateLimits);
 
 test("a poem stays private until it is approved, then gets its own page", async () => {
   const title = "Test Poem For Review";
@@ -630,4 +632,117 @@ test("posters and images open in a lightbox rather than a page of their own", as
     const page = await fetch(`${baseUrl}/art/${image.rows[0].id}`);
     assert.equal(page.status, 404, "an image has no read page of its own");
   }
+});
+
+test("credit modes stay mutually exclusive and rejects are specific", async () => {
+  const both = await submit({
+    kind: "poem",
+    title: "Test Both Credits",
+    body: "Claiming an alias and an account at once.",
+    credit: "An Alias",
+    creditAccount: "@a-handle",
+  });
+  assert.equal(both.status, 400, "an alias and an account together is refused");
+
+  const markup = await submit({
+    kind: "poem",
+    title: "Test Handle Markup",
+    body: "A handle carrying markup.",
+    creditAccount: '<script>alert(1)</script>',
+  });
+  assert.equal(markup.status, 400, "handles cannot carry markup");
+
+  // A handle that is not an https link must never become an anchor.
+  const bare = await submit({
+    kind: "poem",
+    title: "Test Bare Handle",
+    body: "A bare handle is text, not a link.",
+    creditAccount: "@plainhandle",
+  });
+  assert.equal(bare.status, 201);
+  const row = await rowByTitle("Test Bare Handle");
+  const session = await adminSession();
+  await moderate(session, { id: String(row.id), status: "approved", internalNotes: "" });
+  const wall = await (await fetch(`${baseUrl}/art`)).text();
+  assert.match(wall, /@plainhandle/, "the handle is shown");
+  assert.doesNotMatch(
+    wall,
+    /<a[^>]*>@plainhandle/,
+    "but only an https profile becomes a link, so no attacker-chosen scheme",
+  );
+});
+
+test("contributor text is escaped rather than rendered", async () => {
+  const title = "Test Escaping";
+  const payload = '<img src=x onerror="alert(1)">';
+  const sent = await submit({
+    kind: "poem",
+    title,
+    body: `A line with ${payload} inside it.`,
+    credit: payload,
+  });
+  assert.equal(sent.status, 201);
+  const row = await rowByTitle(title);
+  const session = await adminSession();
+  await moderate(session, { id: String(row.id), status: "approved", internalNotes: "" });
+
+  for (const path of ["/art", `/art/${row.id}`]) {
+    const html = await (await fetch(`${baseUrl}${path}`)).text();
+    assert.doesNotMatch(html, /<img src=x onerror=/, `${path} does not render the payload`);
+    assert.match(html, /&lt;img src=x/, `${path} escapes it as text`);
+  }
+});
+
+test("a poem too long for its tile keeps its whole text on its own page", async () => {
+  const title = "Test Long Poem";
+  // Comfortably past both the character budget and the line budget.
+  const lines = Array.from({ length: 30 }, (_, index) => `Line ${index + 1} of the long poem.`);
+  const sent = await submit({ kind: "poem", title, body: lines.join("\n") });
+  assert.equal(sent.status, 201);
+  const row = await rowByTitle(title);
+  const session = await adminSession();
+  await moderate(session, { id: String(row.id), status: "approved", internalNotes: "" });
+
+  const wall = await (await fetch(`${baseUrl}/art`)).text();
+  assert.match(wall, /Read the full poem/, "the tile hands off to the page");
+  // Assert on the rendered tile, not the whole document: the serialised props
+  // legitimately carry more than the tile paints.
+  const teaser = /<p class="tile-teaser">([\s\S]*?)<\/p>/.exec(wall)?.[1] ?? "";
+  assert.match(teaser, /Line 1 of the long poem/, "the teaser starts at the beginning");
+  assert.doesNotMatch(teaser, /Line 30 of the long poem/, "and stops well before the end");
+
+  const page = await (await fetch(`${baseUrl}/art/${row.id}`)).text();
+  assert.match(page, /Line 1 of the long poem/);
+  assert.match(page, /Line 30 of the long poem/, "the page has every line");
+});
+
+test("length limits are enforced at both ends", async () => {
+  assert.equal((await submit({ kind: "poem", title: "x", body: "long enough body" })).status, 400,
+    "a one-character title is refused");
+  assert.equal(
+    (await submit({ kind: "poem", title: "T".repeat(121), body: "long enough body" })).status,
+    400,
+    "an over-long title is refused",
+  );
+  assert.equal((await submit({ kind: "poem", title: "Test Tiny Body", body: "ab" })).status, 400,
+    "a body of two characters is refused");
+  assert.equal(
+    (await submit({ kind: "poem", title: "Test Over Cap", body: "x".repeat(8001) })).status,
+    400,
+    "a poem past its cap is refused",
+  );
+  assert.equal(
+    (await submit({ kind: "essay", title: "Test Essay Cap", body: "x".repeat(40001) })).status,
+    400,
+    "an essay past its cap is refused",
+  );
+  // Six submissions in one scenario would trip the hourly limit, which a
+  // different test covers; this one is about lengths.
+  await resetRateLimits();
+  // The boundary itself must be accepted, not just the far side of it.
+  assert.equal(
+    (await submit({ kind: "poem", title: "Test At Cap", body: "x".repeat(8000) })).status,
+    201,
+    "a poem exactly at the cap is accepted",
+  );
 });
