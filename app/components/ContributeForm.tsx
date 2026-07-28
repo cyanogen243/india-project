@@ -53,7 +53,14 @@ export function ContributeForm({ language }: { language: Language }) {
     }
     setState("idle");
     setMessage("");
-    setPreview({ url: URL.createObjectURL(file), name: file.name, size: file.size });
+    // A data: URL rather than createObjectURL — the CSP's img-src allows
+    // data: and deliberately not blob:, so an object URL renders as a broken
+    // image.
+    const reader = new FileReader();
+    reader.onload = () => {
+      setPreview({ url: String(reader.result), name: file.name, size: file.size });
+    };
+    reader.readAsDataURL(file);
   }
 
   if (state === "sent") {
@@ -271,16 +278,6 @@ export function ContributeForm({ language }: { language: Language }) {
               <div>
                 <p><strong>{preview.name}</strong></p>
                 <p>{formatBytes(preview.size)}</p>
-                <button
-                  type="button"
-                  className="button"
-                  onClick={() => {
-                    setPreview(null);
-                    if (fileInput.current) fileInput.current.value = "";
-                  }}
-                >
-                  {hindi ? "बदलें" : "Change"}
-                </button>
               </div>
             </div>
           ) : (
