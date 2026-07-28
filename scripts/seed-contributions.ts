@@ -27,29 +27,39 @@ type SeedItem = {
   language: "en" | "hi";
   file?: string;
   textFile?: string;
+  sortAt: string;
 };
+
+// The wall sorts by created_at DESC, so these fixed timestamps encode the
+// curated opening arrangement from the approved mockup: slot 1 renders first,
+// kinds deliberately interleaved so posters and writing mix instead of
+// clustering. Real contributions carry real timestamps and stack above the
+// opening collection. db:setup refreshes the slot of an already-seeded row.
+function wallSlot(position: number) {
+  return new Date(Date.UTC(2026, 0, 26, 9, 0) - position * 60_000).toISOString();
+}
 
 const SEEDS: SeedItem[] = [
   // Geometric placeholder posters — admins remove these by hand as real ones arrive.
-  { id: "5eed0001-0000-4000-8000-000000000001", kind: "poster", title: "Sunrise", credit: "The India Project", language: "en", file: "poster-sunrise.png" },
-  { id: "5eed0001-0000-4000-8000-000000000002", kind: "poster", title: "Stripes", credit: "The India Project", language: "en", file: "poster-stripes.png" },
-  { id: "5eed0001-0000-4000-8000-000000000003", kind: "poster", title: "Peaks", credit: "The India Project", language: "en", file: "poster-peaks.png" },
-  { id: "5eed0001-0000-4000-8000-000000000004", kind: "poster", title: "Rays", credit: "The India Project", language: "en", file: "poster-rays.png" },
+  { id: "5eed0001-0000-4000-8000-000000000001", kind: "poster", title: "Sunrise", credit: "The India Project", language: "en", file: "poster-sunrise.png", sortAt: wallSlot(1) },
+  { id: "5eed0001-0000-4000-8000-000000000002", kind: "poster", title: "Stripes", credit: "The India Project", language: "en", file: "poster-stripes.png", sortAt: wallSlot(9) },
+  { id: "5eed0001-0000-4000-8000-000000000003", kind: "poster", title: "Peaks", credit: "The India Project", language: "en", file: "poster-peaks.png", sortAt: wallSlot(3) },
+  { id: "5eed0001-0000-4000-8000-000000000004", kind: "poster", title: "Rays", credit: "The India Project", language: "en", file: "poster-rays.png", sortAt: wallSlot(11) },
 
   // Images — permanent. Salt March photographs verified public domain in
   // India and the US (PD-India + PD-India-URAA on their Commons file pages).
-  { id: "5eed0002-0000-4000-8000-000000000001", kind: "image", title: "Breaking the Salt Law, 1930", subtitle: "Dandi, 5 April 1930", credit: "Public domain", language: "en", file: "image-breaking-the-salt-law.jpg" },
-  { id: "5eed0002-0000-4000-8000-000000000002", kind: "image", title: "The March to Dandi, 1930", credit: "Public domain", language: "en", file: "image-march-to-dandi.jpg" },
-  { id: "5eed0002-0000-4000-8000-000000000003", kind: "image", title: "Evening River", credit: "The India Project", language: "en", file: "image-evening-river.png" },
+  { id: "5eed0002-0000-4000-8000-000000000001", kind: "image", title: "Breaking the Salt Law, 1930", subtitle: "Dandi, 5 April 1930", credit: "Public domain", language: "en", file: "image-breaking-the-salt-law.jpg", sortAt: wallSlot(10) },
+  { id: "5eed0002-0000-4000-8000-000000000002", kind: "image", title: "The March to Dandi, 1930", credit: "Public domain", language: "en", file: "image-march-to-dandi.jpg", sortAt: wallSlot(5) },
+  { id: "5eed0002-0000-4000-8000-000000000003", kind: "image", title: "Evening River", credit: "The India Project", language: "en", file: "image-evening-river.png", sortAt: wallSlot(12) },
 
   // Poems — permanent, public domain.
-  { id: "5eed0003-0000-4000-8000-000000000001", kind: "poem", title: "दोहा", credit: "कबीर (Kabir)", language: "hi", textFile: "poem-kabir-doha.txt" },
-  { id: "5eed0003-0000-4000-8000-000000000002", kind: "poem", title: "दोहा", credit: "रहीम (Rahim)", language: "hi", textFile: "poem-rahim-doha.txt" },
-  { id: "5eed0003-0000-4000-8000-000000000003", kind: "poem", title: "Where the Mind Is Without Fear", subtitle: "Gitanjali 35", credit: "Rabindranath Tagore", language: "en", textFile: "poem-where-the-mind.txt" },
-  { id: "5eed0003-0000-4000-8000-000000000004", kind: "poem", title: "फ़रमान-ए-ख़ुदा", subtitle: "फ़रिशतों से", credit: "मुहम्मद इक़बाल (Muhammad Iqbal)", language: "hi", textFile: "poem-farman-e-khuda.txt" },
+  { id: "5eed0003-0000-4000-8000-000000000001", kind: "poem", title: "दोहा", credit: "कबीर (Kabir)", language: "hi", textFile: "poem-kabir-doha.txt", sortAt: wallSlot(2) },
+  { id: "5eed0003-0000-4000-8000-000000000002", kind: "poem", title: "दोहा", credit: "रहीम (Rahim)", language: "hi", textFile: "poem-rahim-doha.txt", sortAt: wallSlot(6) },
+  { id: "5eed0003-0000-4000-8000-000000000003", kind: "poem", title: "Where the Mind Is Without Fear", subtitle: "Gitanjali 35", credit: "Rabindranath Tagore", language: "en", textFile: "poem-where-the-mind.txt", sortAt: wallSlot(8) },
+  { id: "5eed0003-0000-4000-8000-000000000004", kind: "poem", title: "फ़रमान-ए-ख़ुदा", subtitle: "फ़रिशतों से", credit: "मुहम्मद इक़बाल (Muhammad Iqbal)", language: "hi", textFile: "poem-farman-e-khuda.txt", sortAt: wallSlot(7) },
 
   // Essay — permanent. Verbatim from marxists.org/archive/bhagat-singh/1931/02/02.htm
-  { id: "5eed0004-0000-4000-8000-000000000001", kind: "essay", title: "To Young Political Workers", subtitle: "A letter, February 1931", credit: "Bhagat Singh", language: "en", textFile: "essay-to-young-political-workers.txt" },
+  { id: "5eed0004-0000-4000-8000-000000000001", kind: "essay", title: "To Young Political Workers", subtitle: "A letter, February 1931", credit: "Bhagat Singh", language: "en", textFile: "essay-to-young-political-workers.txt", sortAt: wallSlot(4) },
 ];
 
 // Seeds carry no usable recovery code: the hash is derived from the fixed id
@@ -73,11 +83,19 @@ export async function seedContributions() {
     });
     if (removed.rows.length > 0) continue;
 
+    // An already-present seed only has its wall slot refreshed: databases
+    // seeded before the curated order existed carry insertion-time stamps.
     const existing = await db.execute({
       sql: "SELECT 1 FROM contributions WHERE id = ?",
       args: [seed.id],
     });
-    if (existing.rows.length > 0) continue;
+    if (existing.rows.length > 0) {
+      await db.execute({
+        sql: "UPDATE contributions SET created_at = ? WHERE id = ? AND seeded = 1 AND created_at <> ?",
+        args: [seed.sortAt, seed.id, seed.sortAt],
+      });
+      continue;
+    }
 
     let storageKey: string | null = null;
     let socialKey: string | null = null;
@@ -117,7 +135,7 @@ export async function seedContributions() {
       args: [
         seed.id, seed.kind, seed.title, seed.subtitle ?? "", seed.credit,
         body, seed.language, storageKey, socialKey, mimeType, width, height,
-        byteSize, fingerprint, seedCodeHash(seed.id), now, now,
+        byteSize, fingerprint, seedCodeHash(seed.id), seed.sortAt, now,
       ],
     });
     console.log(`seeded ${seed.kind}: ${seed.title}`);
