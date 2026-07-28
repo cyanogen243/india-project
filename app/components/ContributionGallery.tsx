@@ -17,7 +17,7 @@ function tileColour(id: string) {
 
 function excerpt(body: string) {
   const trimmed = body.trim();
-  return trimmed.length > 180 ? `${trimmed.slice(0, 180)}…` : trimmed;
+  return trimmed.length > 400 ? `${trimmed.slice(0, 400)}…` : trimmed;
 }
 
 export function ContributionGallery({
@@ -37,22 +37,27 @@ export function ContributionGallery({
     ["writing", hindi ? "लेखन" : "Writing"],
   ] as const;
 
-  const shareText = hindi ? "द इंडिया प्रोजेक्ट से" : "From The India Project";
-
   return (
     <>
-      <div className="gallery-filters" role="group" aria-label={hindi ? "छाँटें" : "Filter"}>
-        {filters.map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            className={`gallery-filter ${filter === value ? "active" : ""}`}
-            aria-pressed={filter === value}
-            onClick={() => setFilter(value)}
-          >
-            {label}
-          </button>
-        ))}
+      <div className="gallery-toolbar">
+        <div className="gallery-filters" role="group" aria-label={hindi ? "छाँटें" : "Filter"}>
+          {filters.map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              className={`gallery-filter ${filter === value ? "active" : ""}`}
+              aria-pressed={filter === value}
+              onClick={() => setFilter(value)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="gallery-licence">
+          {hindi
+            ? "सब कुछ मुफ़्त है · ग़ैर-व्यावसायिक उपयोग · CC BY-NC-SA 4.0"
+            : "Everything is free · non-commercial use · CC BY-NC-SA 4.0"}
+        </p>
       </div>
 
       {visible.length === 0 ? (
@@ -62,13 +67,9 @@ export function ContributionGallery({
             : "Nothing here yet. The first contribution could be yours."}
         </p>
       ) : (
-        <div className="gallery-grid">
+        <div className="gallery-wall">
           {visible.map((item) => {
             const fileUrl = `/api/contributions/${item.id}/file`;
-            const pageUrl =
-              typeof window === "undefined"
-                ? ""
-                : `${window.location.origin}${hindi ? "/hi/art" : "/art"}`;
             return (
               <article key={item.id} className="gallery-card">
                 {item.kind === "image" ? (
@@ -85,39 +86,21 @@ export function ContributionGallery({
                     <p>{excerpt(item.body)}</p>
                   </div>
                 )}
-
-                <div className="gallery-meta">
-                  {item.kind === "image" && <h3>{item.title}</h3>}
-                  <small>
-                    {item.credit || (hindi ? "गुमनाम" : "Anonymous")}
-                    {item.kind === "image" && item.width && item.height
-                      ? ` · ${item.width}×${item.height}`
-                      : ""}
-                  </small>
-                  <small>CC BY-NC-SA 4.0</small>
-                </div>
-
-                <div className="gallery-actions">
+                <div className="gallery-caption">
+                  <div>
+                    {item.kind === "image" && <strong>{item.title}</strong>}
+                    <small>{item.credit || (hindi ? "गुमनाम" : "Anonymous")}</small>
+                  </div>
                   {item.kind === "image" && (
-                    <>
-                      <a className="button" href={`${fileUrl}?download=1`} download>
-                        {hindi ? "प्रिंट" : "Print size"}
+                    <div className="gallery-downloads">
+                      <a href={`${fileUrl}?download=1`} download>
+                        {hindi ? "प्रिंट" : "Print"}
                       </a>
-                      <a className="button" href={`${fileUrl}?variant=social&download=1`} download>
-                        {hindi ? "सोशल" : "Social size"}
+                      <a href={`${fileUrl}?variant=social&download=1`} download>
+                        {hindi ? "सोशल" : "Social"}
                       </a>
-                    </>
+                    </div>
                   )}
-                  {/* Plain intent links, so no third-party share widget or
-                      tracker is loaded into the page. */}
-                  <a
-                    className="button"
-                    href={`https://wa.me/?text=${encodeURIComponent(`${item.title} — ${shareText} ${pageUrl}`)}`}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                  >
-                    WhatsApp
-                  </a>
                 </div>
               </article>
             );

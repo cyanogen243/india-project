@@ -2547,13 +2547,22 @@ footer p {
   background: white;
 }
 
-/* Public gallery */
+/* Public gallery — the art is the interface: a masonry wall of work with
+   small captions, licence stated once above the wall rather than per card. */
+
+.gallery-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  margin-bottom: 1.4rem;
+}
 
 .gallery-filters {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-  margin-bottom: 1.4rem;
 }
 
 .gallery-filter {
@@ -2570,78 +2579,81 @@ footer p {
   color: var(--paper);
 }
 
-.gallery-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 1.2rem;
-  align-items: start;
+.gallery-licence {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
+
+.gallery-wall {
+  columns: 15rem;
+  column-gap: 1.1rem;
 }
 
 .gallery-card {
-  display: grid;
-  border: 1px solid var(--ink);
+  break-inside: avoid;
+  margin: 0 0 1.1rem;
   background: white;
-  overflow: hidden;
+  border: 1px solid var(--line);
+  box-shadow: 0 1px 5px rgba(11, 11, 11, 0.09);
 }
 
 .gallery-card img {
+  display: block;
   width: 100%;
   height: auto;
-  display: block;
-  border-bottom: 1px solid var(--ink);
 }
 
-/* Writing has no thumbnail, so it is set as a typographic tile instead of
-   being demoted to a list. A poem laid out this way reads as a poster. */
 .gallery-writing {
   display: grid;
-  align-content: start;
-  gap: 0.6rem;
-  padding: 1.4rem;
-  min-height: 220px;
-  border-bottom: 1px solid var(--ink);
-  color: var(--paper);
+  gap: 0.7rem;
+  padding: 1.6rem 1.3rem;
+  color: #fffaf1;
 }
 
 .gallery-writing h3 {
   margin: 0;
-  font-size: 1.4rem;
+  font-size: 1.35rem;
   line-height: 1.1;
 }
 
 .gallery-writing p {
   margin: 0;
-  font-size: 1.05rem;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  opacity: 0.95;
-}
-
-.gallery-meta {
-  display: grid;
-  gap: 0.3rem;
-  padding: 0.9rem 1rem;
-}
-
-.gallery-meta h3 {
-  margin: 0;
   font-size: 1rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
 }
 
-.gallery-meta small {
-  color: var(--ink-soft);
-}
-
-.gallery-actions {
+.gallery-caption {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  padding: 0 1rem 1rem;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.7rem;
+  padding: 0.6rem 0.8rem;
 }
 
-.gallery-actions .button {
-  font-size: 0.78rem;
-  padding: 0.4rem 0.7rem;
+.gallery-caption strong {
+  display: block;
+  font-size: 0.85rem;
+  line-height: 1.25;
+}
+
+.gallery-caption small {
+  color: var(--ink-soft);
+  font-size: 0.74rem;
+}
+
+.gallery-downloads {
+  display: flex;
+  gap: 0.6rem;
+  white-space: nowrap;
+}
+
+.gallery-downloads a {
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .gallery-empty {
