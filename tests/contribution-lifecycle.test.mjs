@@ -391,8 +391,10 @@ test("public-domain writing is attributed to its author, not licensed as ours", 
   const session = await adminSession();
   await moderate(session, { id: String(row.id), status: "approved", internalNotes: "" });
 
+  // Licence names are clutter on the wall itself: writing carries its terms on
+  // its own page, and a poster or image shows them in the lightbox.
   const wall = await (await fetch(`${baseUrl}/art`)).text();
-  assert.match(wall, /Public domain/, "the tile states its own terms");
+  assert.doesNotMatch(wall, /CC BY-NC-SA 4\.0/, "no licence names clutter the tiles");
   assert.doesNotMatch(
     wall,
     /Everything is free · non-commercial use · CC BY-NC-SA 4\.0/,
@@ -400,8 +402,8 @@ test("public-domain writing is attributed to its author, not licensed as ours", 
   );
 
   const page = await (await fetch(`${baseUrl}/art/${row.id}`)).text();
-  assert.match(page, /Public domain/);
-  assert.match(page, /kavitakosh\.org/, "the read page links the source for verification");
+  assert.match(page, /Public domain/, "the read page states the work's own terms");
+  assert.match(page, /kavitakosh\.org/, "and links the source for verification");
 });
 
 test("a public-domain claim has to be checkable, and only applies to writing", async () => {

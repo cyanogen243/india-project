@@ -2519,6 +2519,86 @@ footer p {
   background: var(--paper-deep);
 }
 
+/* Lightbox for posters and images: they have no page of their own, so the
+   full view and the details that would clutter every tile live here. */
+button.gallery-art {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+}
+
+.art-lightbox {
+  border: 0;
+  padding: 0;
+  background: none;
+  width: min(46rem, 94vw);
+}
+
+.art-lightbox::backdrop {
+  background: rgba(11, 11, 11, 0.72);
+}
+
+.art-lightbox-panel {
+  position: relative;
+  max-height: 88vh;
+  overflow-y: auto;
+  border: 1px solid var(--ink);
+  background: #fffaf1;
+  box-shadow: 10px 10px 0 rgba(11, 11, 11, 0.35);
+}
+
+.art-lightbox-panel img {
+  /* Capped so the detail block below is always on screen: the point of the
+     lightbox is the artwork *and* the terms that go with it. */
+  width: 100%;
+  max-height: 62vh;
+  height: auto;
+  object-fit: contain;
+  background: var(--paper-deep);
+}
+
+.art-lightbox-close {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.6rem;
+  border: 0;
+  background: rgba(255, 250, 241, 0.85);
+  font-size: 1.6rem;
+  line-height: 1;
+  padding: 0.1rem 0.5rem;
+  cursor: pointer;
+}
+
+.art-lightbox-close:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.art-lightbox-detail {
+  display: grid;
+  gap: 0.45rem;
+  border-top: 1px solid var(--line);
+  padding: 1rem 1.2rem 1.2rem;
+}
+
+.art-lightbox-detail h3 {
+  margin: 0;
+  font-size: 1.3rem;
+  text-transform: uppercase;
+}
+
+.art-lightbox-detail p {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.art-lightbox-licence {
+  color: var(--ink-soft);
+}
+
 .admin-placeholder-note {
   margin: 0.4rem 0 0;
   color: #765105;

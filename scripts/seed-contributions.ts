@@ -55,11 +55,21 @@ const SEEDS: SeedItem[] = [
   { id: "5eed0001-0000-4000-8000-000000000003", kind: "poster", title: "Peaks", credit: "The India Project", language: "en", file: "poster-peaks.png", sortAt: wallSlot(3), placeholder: true },
   { id: "5eed0001-0000-4000-8000-000000000004", kind: "poster", title: "Rays", credit: "The India Project", language: "en", file: "poster-rays.png", sortAt: wallSlot(11), placeholder: true },
 
-  // Images — permanent. Salt March photographs verified public domain in
+  // Salt March photographs — permanent collection, verified public domain in
   // India and the US (PD-India + PD-India-URAA on their Commons file pages).
-  { id: "5eed0002-0000-4000-8000-000000000001", kind: "image", title: "Breaking the Salt Law, 1930", subtitle: "Dandi, 5 April 1930", credit: "Public domain", language: "en", file: "image-breaking-the-salt-law.jpg", sortAt: wallSlot(10) },
-  { id: "5eed0002-0000-4000-8000-000000000002", kind: "image", title: "The March to Dandi, 1930", credit: "Public domain", language: "en", file: "image-march-to-dandi.jpg", sortAt: wallSlot(5) },
-  { id: "5eed0002-0000-4000-8000-000000000003", kind: "image", title: "Evening River", credit: "The India Project", language: "en", file: "image-evening-river.png", sortAt: wallSlot(12) },
+  // `credit` names the author, never the licence: the licence is carried by
+  // `provenance` and rendered separately, so putting "Public domain" here made
+  // a tile read "Public domain · CC BY-NC-SA 4.0". The photographers are not
+  // recorded on the Commons pages, which is ordinary for press images of the
+  // period. sourceUrl is left blank deliberately rather than guessed — the
+  // Commons file URLs were not carried over when these were added, and an
+  // invented link is worse than none. Fill them in when they are recovered.
+  { id: "5eed0002-0000-4000-8000-000000000001", kind: "image", title: "Breaking the Salt Law, 1930", subtitle: "Dandi, 5 April 1930", credit: "Unknown photographer", language: "en", file: "image-breaking-the-salt-law.jpg", sortAt: wallSlot(10), publicDomain: { sourceUrl: "" } },
+  { id: "5eed0002-0000-4000-8000-000000000002", kind: "image", title: "The March to Dandi, 1930", credit: "Unknown photographer", language: "en", file: "image-march-to-dandi.jpg", sortAt: wallSlot(5), publicDomain: { sourceUrl: "" } },
+
+  // Our own illustration, and a placeholder like the geometric posters: it
+  // fills the wall until contributed artwork replaces it.
+  { id: "5eed0002-0000-4000-8000-000000000003", kind: "image", title: "Evening River", credit: "The India Project", language: "en", file: "image-evening-river.png", sortAt: wallSlot(12), placeholder: true },
 
   // Poems — permanent, public domain.
   { id: "5eed0003-0000-4000-8000-000000000001", kind: "poem", title: "दोहा", credit: "कबीर (Kabir)", language: "hi", textFile: "poem-kabir-doha.txt", sortAt: wallSlot(2), publicDomain: { sourceUrl: "https://kavitakosh.org/kk/कबीर" } },
@@ -102,6 +112,13 @@ export async function seedContributions() {
       // Databases seeded before a field existed converge here rather than
       // needing a reset: wall slot, provenance, source and placeholder status
       // are all refreshed from this file, which stays the source of truth.
+      // A licence string sitting in the author column is never a deliberate
+      // admin edit, so this one value is corrected in place. Everything else a
+      // moderator may have edited is left alone.
+      await db.execute({
+        sql: "UPDATE contributions SET credit = ? WHERE id = ? AND seeded = 1 AND credit = 'Public domain'",
+        args: [seed.credit, seed.id],
+      });
       await db.execute({
         sql: `UPDATE contributions
               SET created_at = ?, provenance = ?, source_url = ?, placeholder = ?

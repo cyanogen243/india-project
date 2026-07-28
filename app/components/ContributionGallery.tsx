@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import type { Language } from "@/app/lib/content";
@@ -138,6 +138,19 @@ export function ContributionGallery({
   const [filter, setFilter] = useState<"all" | PublicContribution["kind"]>("all");
   const visible = items.filter((item) => filter === "all" || item.kind === filter);
 
+  // Posters and images have no page of their own, so the full view and the
+  // details that would otherwise clutter every tile — licence, source,
+  // dimensions — live in a lightbox opened from the artwork.
+  const [openItem, setOpenItem] = useState<PublicContribution | null>(null);
+  const lightbox = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    const dialog = lightbox.current;
+    if (!dialog) return;
+    if (openItem && !dialog.open) dialog.showModal();
+    if (!openItem && dialog.open) dialog.close();
+  }, [openItem]);
+
   const filters = [
     ["all", hindi ? "सब" : "All"],
     ["poster", hindi ? "पोस्टर" : "Posters"],
@@ -193,7 +206,14 @@ export function ContributionGallery({
             return (
               <article key={item.id} className="gallery-card" data-kind={item.kind}>
                 {isFile && (
-                  <div className="gallery-art">
+                  <button
+                    type="button"
+                    className="gallery-art"
+                    onClick={() => setOpenItem(item)}
+                    aria-label={
+                      hindi ? `${item.title} — बड़ा करके देखें` : `${item.title} — view larger`
+                    }
+                  >
                     <Image
                       src={`${fileUrl}?variant=social`}
                       alt={item.title}
@@ -201,7 +221,7 @@ export function ContributionGallery({
                       height={item.height ?? 1000}
                       unoptimized
                     />
-                  </div>
+                  </button>
                 )}
 
                 {item.kind === "poem" && (
@@ -242,8 +262,6 @@ export function ContributionGallery({
                       <KindTag kind={item.kind} hindi={hindi} />
                       <small>
                         <Credit item={item} hindi={hindi} />
-                        {" · "}
-                        <Licence item={item} hindi={hindi} />
                         {isFile && item.width && item.height
                           ? ` · ${item.width}×${item.height}`
                           : ""}
@@ -269,6 +287,65 @@ export function ContributionGallery({
           })}
         </div>
       )}
+
+      <dialog
+        ref={lightbox}
+        className="art-lightbox"
+        onClose={() => setOpenItem(null)}
+        onClick={(event) => {
+          if (event.target === lightbox.current) lightbox.current?.close();
+        }}
+      >
+        {openItem && (
+          <div className="art-lightbox-panel">
+            <button
+              type="button"
+              className="art-lightbox-close"
+              onClick={() => lightbox.current?.close()}
+              aria-label={hindi ? "बंद करें" : "Close"}
+            >
+              ×
+            </button>
+            <Image
+              src={`/api/contributions/${openItem.id}/file?variant=social`}
+              alt={openItem.title}
+              width={openItem.width ?? 800}
+              height={openItem.height ?? 1000}
+              unoptimized
+            />
+            <div className="art-lightbox-detail">
+              <h3>{openItem.title}</h3>
+              {openItem.subtitle && <p className="tile-sub">{openItem.subtitle}</p>}
+              <p>
+                <Credit item={openItem} hindi={hindi} />
+                {openItem.width && openItem.height ? ` · ${openItem.width}×${openItem.height}` : ""}
+              </p>
+              <p className="art-lightbox-licence">
+                <Licence item={openItem} hindi={hindi} />
+                {openItem.provenance === "public_domain" && openItem.sourceUrl ? (
+                  <>
+                    {" · "}
+                    <a href={openItem.sourceUrl} target="_blank" rel="noreferrer noopener">
+                      {hindi ? "मूल स्रोत" : "Original source"}
+                    </a>
+                  </>
+                ) : null}
+              </p>
+              <div className="gallery-downloads">
+                <a href={`/api/contributions/${openItem.id}/file?download=1`} download>
+                  {hindi ? "प्रिंट" : "Print"}
+                </a>
+                <a
+                  href={`/api/contributions/${openItem.id}/file?variant=social&download=1`}
+                  download
+                >
+                  {hindi ? "सोशल" : "Social"}
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
+      </dialog>
     </>
   );
 }
