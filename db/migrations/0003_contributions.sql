@@ -1,8 +1,10 @@
 CREATE TABLE IF NOT EXISTS contributions (
   id TEXT PRIMARY KEY NOT NULL,
-  kind TEXT NOT NULL CHECK (kind IN ('image', 'writing')),
+  kind TEXT NOT NULL CHECK (kind IN ('poster', 'image', 'poem', 'essay')),
   title TEXT NOT NULL,
+  subtitle TEXT NOT NULL DEFAULT '',
   credit TEXT NOT NULL DEFAULT '',
+  credit_account TEXT NOT NULL DEFAULT '',
   body TEXT NOT NULL DEFAULT '',
   language TEXT NOT NULL CHECK (language IN ('en', 'hi')),
   storage_key TEXT,
@@ -15,6 +17,7 @@ CREATE TABLE IF NOT EXISTS contributions (
     CHECK (status IN ('pending', 'approved', 'declined', 'withdrawn')),
   internal_notes TEXT NOT NULL DEFAULT '',
   content_fingerprint TEXT,
+  seeded INTEGER NOT NULL DEFAULT 0,
   decline_reason TEXT CHECK (decline_reason IN
     ('off_topic', 'not_own_work', 'identifying_info', 'low_quality', 'duplicate', 'other')),
   recovery_code_hash TEXT NOT NULL,

@@ -47,6 +47,21 @@ export function recoveryCodeMatches(candidate: string, storedHash: string) {
 
 export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
 
+export const FILE_KINDS = ["poster", "image"] as const;
+export const TEXT_KINDS = ["poem", "essay"] as const;
+export const ALL_KINDS = ["poster", "image", "poem", "essay"] as const;
+export type ContributionKind = (typeof ALL_KINDS)[number];
+
+/**
+ * A poem at or under this length is shown in full on its tile; a longer one is
+ * cut here and hands off to its read page. Essays always show only title and
+ * subtitle on the wall. The essay ceiling accommodates seeded historical
+ * texts — Bhagat Singh's letter alone is ~23,000 characters.
+ */
+export const POEM_TILE_LIMIT = 600;
+export const POEM_MAX_LENGTH = 8000;
+export const ESSAY_MAX_LENGTH = 40000;
+
 /**
  * A few kilobytes of PNG can declare enormous dimensions and expand to
  * gigabytes once decoded — a decompression bomb. The byte-size cap does not

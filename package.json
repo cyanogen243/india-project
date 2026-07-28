@@ -23,9 +23,11 @@
     "typecheck": "tsc --noEmit",
     "test": "npm run build && node --test tests/vercel-rendered-html.test.mjs",
     "test:sites": "npm run build:sites && node --test tests/rendered-html.test.mjs",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern .output"
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern .output",
+    "seed:art": "tsx scripts/seed-contributions.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1096.0",
     "@fontsource/anton": "^5.3.0",
     "@fontsource/inter": "^5.3.0",
     "@libsql/client": "^0.17.4",

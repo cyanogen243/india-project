@@ -4,10 +4,18 @@ import { dirname, join, resolve } from "node:path";
 /**
  * Object storage for contribution files.
  *
- * Local development writes to the ignored `data/uploads` directory. Vercel's
- * filesystem is read-only apart from an ephemeral `/tmp`, so deployed
- * environments must use a blob driver instead. Selecting the driver here keeps
- * the calling code identical in both places.
+ * Local development writes to the ignored `data/uploads` directory. Deployed
+ * environments use any S3-compatible store — Cloudflare R2 at launch, with a
+ * planned move to self-hosted MinIO; both speak the same API, so switching is
+ * an environment-variable change. Vercel's filesystem is read-only apart from
+ * an ephemeral /tmp, so the disk driver must never run in production.
+ *
+ * S3 driver activates when these are set:
+ *   ART_S3_ENDPOINT   e.g. https://<account>.r2.cloudflarestorage.com
+ *   ART_S3_BUCKET
+ *   ART_S3_ACCESS_KEY_ID
+ *   ART_S3_SECRET_ACCESS_KEY
+ *   ART_S3_REGION     optional, defaults to "auto" (R2's expectation)
  */
 
 export type StoredObject = {
@@ -31,29 +39,78 @@ function localPath(key: string) {
   return path;
 }
 
-function blobDriverEnabled() {
-  return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+function s3Config() {
+  const endpoint = process.env.ART_S3_ENDPOINT;
+  const bucket = process.env.ART_S3_BUCKET;
+  const accessKeyId = process.env.ART_S3_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.ART_S3_SECRET_ACCESS_KEY;
+  if (!endpoint || !bucket || !accessKeyId || !secretAccessKey) return null;
+  return {
+    endpoint,
+    bucket,
+    region: process.env.ART_S3_REGION ?? "auto",
+    credentials: { accessKeyId, secretAccessKey },
+  };
+}
+
+type S3Module = typeof import("@aws-sdk/client-s3");
+let s3ClientPromise:
+  | Promise<{ client: InstanceType<S3Module["S3Client"]>; module: S3Module; bucket: string }>
+  | undefined;
+
+function getS3() {
+  const config = s3Config();
+  if (!config) return null;
+  if (!s3ClientPromise) {
+    s3ClientPromise = import("@aws-sdk/client-s3").then((module) => ({
+      module,
+      bucket: config.bucket,
+      client: new module.S3Client({
+        endpoint: config.endpoint,
+        region: config.region,
+        credentials: config.credentials,
+        forcePathStyle: true,
+      }),
+    }));
+  }
+  return s3ClientPromise;
 }
 
 export async function putObject(key: string, bytes: Uint8Array, contentType: string) {
   assertKey(key);
-  if (blobDriverEnabled()) {
-    throw new Error(
-      "Blob storage driver is not wired yet. Install @vercel/blob and implement putObject before deploying.",
+  const s3 = getS3();
+  if (s3) {
+    const { client, module, bucket } = await s3;
+    await client.send(
+      new module.PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body: bytes,
+        ContentType: contentType,
+      }),
     );
+    return;
   }
   const path = localPath(key);
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, bytes);
-  void contentType;
 }
 
 export async function getObject(key: string): Promise<StoredObject | null> {
   assertKey(key);
-  if (blobDriverEnabled()) {
-    throw new Error(
-      "Blob storage driver is not wired yet. Install @vercel/blob and implement getObject before deploying.",
-    );
+  const s3 = getS3();
+  if (s3) {
+    const { client, module, bucket } = await s3;
+    try {
+      const result = await client.send(
+        new module.GetObjectCommand({ Bucket: bucket, Key: key }),
+      );
+      const bytes = await result.Body?.transformToByteArray();
+      if (!bytes) return null;
+      return { bytes, contentType: result.ContentType ?? contentTypeForKey(key) };
+    } catch {
+      return null;
+    }
   }
   try {
     const bytes = await readFile(localPath(key));
@@ -65,10 +122,11 @@ export async function getObject(key: string): Promise<StoredObject | null> {
 
 export async function deleteObject(key: string) {
   assertKey(key);
-  if (blobDriverEnabled()) {
-    throw new Error(
-      "Blob storage driver is not wired yet. Install @vercel/blob and implement deleteObject before deploying.",
-    );
+  const s3 = getS3();
+  if (s3) {
+    const { client, module, bucket } = await s3;
+    await client.send(new module.DeleteObjectCommand({ Bucket: bucket, Key: key }));
+    return;
   }
   await rm(localPath(key), { force: true });
 }

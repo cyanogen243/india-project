@@ -2687,3 +2687,154 @@ footer p {
   font-size: 0.9rem;
   color: var(--ink-soft);
 }
+
+/* Category tags: glyph + label in the category colour, one per caption. */
+.gallery-caption .meta-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.28rem;
+}
+
+.gallery-caption .tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.32rem;
+  border: 1px solid var(--line);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.gallery-caption .tag svg {
+  width: 9px;
+  height: 9px;
+  margin-right: 0.26rem;
+}
+
+.tag-poster { color: var(--red); border-color: var(--red); }
+.tag-image { color: #0d47a1; border-color: #0d47a1; }
+.tag-poem { color: #3b1361; border-color: #3b1361; }
+.tag-essay { color: #176845; border-color: #176845; }
+
+.gallery-caption small a {
+  color: var(--ink);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Frames from print culture: a poster is pasted full-bleed in a hard frame,
+   an image sits matted like a photo print, an essay opens like a pamphlet. */
+.gallery-card[data-kind="poster"] { border: 2px solid var(--ink); }
+.gallery-card[data-kind="image"] .gallery-art { padding: 0.85rem; }
+.gallery-card[data-kind="image"] .gallery-art img { border: 1px solid var(--line); }
+.gallery-card[data-kind="essay"] .gallery-essay { border-top: 5px solid var(--ink); }
+
+.gallery-art img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.gallery-tile {
+  display: grid;
+  gap: 0.7rem;
+  padding: 1.7rem 1.4rem;
+  color: #fffaf1;
+}
+
+.gallery-tile h3 {
+  margin: 0;
+  font-size: 1.35rem;
+  line-height: 1.1;
+}
+
+.tile-sub {
+  margin: -0.35rem 0 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+.gallery-tile p {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.gallery-tile .tile-teaser {
+  display: -webkit-box;
+  -webkit-line-clamp: 14;
+  line-clamp: 14;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.tile-more {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.gallery-tile .tile-more {
+  color: #fffaf1;
+}
+
+.gallery-essay {
+  display: grid;
+  gap: 0.6rem;
+  padding: 1.7rem 1.4rem;
+}
+
+.gallery-essay h3 {
+  margin: 0;
+  font-size: 1.35rem;
+  line-height: 1.1;
+}
+
+.gallery-essay .tile-sub {
+  color: var(--ink-soft);
+}
+
+.gallery-essay .tile-more {
+  color: var(--red);
+}
+
+/* Read page for full poems and essays */
+.read-page {
+  max-width: 44rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.read-credit {
+  margin: 0;
+  font-weight: 700;
+}
+
+.read-body {
+  white-space: pre-wrap;
+  font-size: 1.05rem;
+  line-height: 1.75;
+  padding: 1.6rem;
+  border: 1px solid var(--ink);
+  background: #fffaf1;
+}
+
+.read-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.8rem;
+  align-items: baseline;
+}
+
+.contribute-credit-field {
+  margin-top: 1rem;
+}

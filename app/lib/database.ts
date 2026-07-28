@@ -77,8 +77,9 @@ export const migrationStatements = [
   "CREATE INDEX IF NOT EXISTS visitor_daily_date_idx ON visitor_daily_identifiers(visit_date)",
   `CREATE TABLE IF NOT EXISTS contributions (
     id TEXT PRIMARY KEY NOT NULL,
-    kind TEXT NOT NULL CHECK (kind IN ('image', 'writing')),
-    title TEXT NOT NULL, credit TEXT NOT NULL DEFAULT '',
+    kind TEXT NOT NULL CHECK (kind IN ('poster', 'image', 'poem', 'essay')),
+    title TEXT NOT NULL, subtitle TEXT NOT NULL DEFAULT '',
+    credit TEXT NOT NULL DEFAULT '', credit_account TEXT NOT NULL DEFAULT '',
     body TEXT NOT NULL DEFAULT '',
     language TEXT NOT NULL CHECK (language IN ('en', 'hi')),
     storage_key TEXT, social_storage_key TEXT, mime_type TEXT,
@@ -86,6 +87,7 @@ export const migrationStatements = [
     status TEXT NOT NULL DEFAULT 'pending'
       CHECK (status IN ('pending', 'approved', 'declined', 'withdrawn')),
     internal_notes TEXT NOT NULL DEFAULT '', content_fingerprint TEXT,
+    seeded INTEGER NOT NULL DEFAULT 0,
     decline_reason TEXT CHECK (decline_reason IN
       ('off_topic', 'not_own_work', 'identifying_info', 'low_quality', 'duplicate', 'other')),
     recovery_code_hash TEXT NOT NULL,
@@ -192,9 +194,11 @@ export function seedContentBundle(): ContentBundle {
 
 export type PublicContribution = {
   id: string;
-  kind: "image" | "writing";
+  kind: "poster" | "image" | "poem" | "essay";
   title: string;
+  subtitle: string;
   credit: string;
+  creditAccount: string;
   body: string;
   language: string;
   width: number | null;
@@ -210,22 +214,55 @@ export type PublicContribution = {
 export async function loadApprovedContributions(): Promise<PublicContribution[]> {
   const db = await ensureDatabase();
   const result = await db.execute(
-    `SELECT id, kind, title, credit, body, language, width, height, created_at
+    `SELECT id, kind, title, subtitle, credit, credit_account, body, language,
+            width, height, created_at
      FROM contributions
      WHERE status = 'approved'
      ORDER BY created_at DESC`,
   );
   return result.rows.map((row) => ({
     id: String(row.id),
-    kind: String(row.kind) as "image" | "writing",
+    kind: String(row.kind) as PublicContribution["kind"],
     title: String(row.title),
+    subtitle: String(row.subtitle),
     credit: String(row.credit),
+    creditAccount: String(row.credit_account),
     body: String(row.body),
     language: String(row.language),
     width: row.width === null ? null : Number(row.width),
     height: row.height === null ? null : Number(row.height),
     createdAt: String(row.created_at),
   }));
+}
+
+/**
+ * A single approved poem or essay for its read page. Returns null for image
+ * kinds and for anything not approved, so pending work never renders.
+ */
+export async function loadApprovedText(id: string): Promise<PublicContribution | null> {
+  const db = await ensureDatabase();
+  const result = await db.execute({
+    sql: `SELECT id, kind, title, subtitle, credit, credit_account, body,
+                 language, width, height, created_at
+          FROM contributions
+          WHERE id = ? AND status = 'approved' AND kind IN ('poem', 'essay')`,
+    args: [id],
+  });
+  const row = result.rows[0];
+  if (!row) return null;
+  return {
+    id: String(row.id),
+    kind: String(row.kind) as PublicContribution["kind"],
+    title: String(row.title),
+    subtitle: String(row.subtitle),
+    credit: String(row.credit),
+    creditAccount: String(row.credit_account),
+    body: String(row.body),
+    language: String(row.language),
+    width: null,
+    height: null,
+    createdAt: String(row.created_at),
+  };
 }
 
 export async function loadPublishedContent(): Promise<ContentBundle> {

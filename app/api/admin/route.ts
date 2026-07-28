@@ -58,10 +58,10 @@ export async function GET(request: NextRequest) {
                          note, language, status, internal_notes, consented_at,
                          created_at, updated_at, retention_eligible_at
                   FROM volunteer_submissions ORDER BY created_at DESC`),
-      db.execute(`SELECT id, kind, title, credit, body, language, storage_key,
-                         social_storage_key, mime_type, width, height, byte_size,
-                         status, internal_notes, decline_reason, created_at,
-                         updated_at, reviewed_by, reviewed_at
+      db.execute(`SELECT id, kind, title, subtitle, credit, credit_account, body,
+                         language, storage_key, social_storage_key, mime_type,
+                         width, height, byte_size, status, internal_notes, seeded,
+                         decline_reason, created_at, updated_at, reviewed_by, reviewed_at
                   FROM contributions ORDER BY created_at DESC`),
       db.execute(`SELECT id, collection, record_id, language, sort_order, draft_json,
                          published_json, version, published_at, updated_at
@@ -103,7 +103,10 @@ export async function GET(request: NextRequest) {
         id: String(row.id),
         kind: String(row.kind),
         title: String(row.title),
+        subtitle: String(row.subtitle),
         credit: String(row.credit),
+        creditAccount: String(row.credit_account),
+        seeded: Number(row.seeded) === 1,
         body: String(row.body),
         language: String(row.language),
         storageKey: row.storage_key ? String(row.storage_key) : null,
@@ -298,6 +301,14 @@ export async function POST(request: NextRequest) {
           { status: 400 },
         );
       }
+      const existing = await db.execute({
+        sql: "SELECT kind, status, seeded FROM contributions WHERE id = ?",
+        args: [input.id],
+      });
+      const previous = existing.rows[0];
+      if (!previous) {
+        return NextResponse.json({ error: "Contribution not found." }, { status: 404 });
+      }
       const now = new Date();
       const retention =
         input.status === "declined" || input.status === "withdrawn"
@@ -323,6 +334,37 @@ export async function POST(request: NextRequest) {
       await writeAuditEvent(user.id, "reviewed", "contribution", input.id, {
         status: input.status,
       });
+
+      // Geometric seed posters exist only until real ones arrive: approving a
+      // real poster permanently removes the oldest remaining poster seed.
+      // Other kinds keep their seeded content — the Salt March photographs and
+      // public-domain writing are collection, not placeholder. Firing only on
+      // the transition into approved stops a status toggle from burning
+      // through several seeds.
+      if (
+        input.status === "approved" &&
+        previous.status !== "approved" &&
+        previous.kind === "poster" &&
+        Number(previous.seeded) !== 1
+      ) {
+        const seed = await db.execute(
+          `SELECT id, storage_key, social_storage_key FROM contributions
+           WHERE seeded = 1 AND kind = 'poster' ORDER BY created_at ASC LIMIT 1`,
+        );
+        const row = seed.rows[0];
+        if (row) {
+          for (const key of [row.storage_key, row.social_storage_key]) {
+            if (typeof key === "string" && key) await deleteObject(key);
+          }
+          await db.execute({
+            sql: "DELETE FROM contributions WHERE id = ?",
+            args: [row.id],
+          });
+          await writeAuditEvent(user.id, "seed_retired", "contribution", String(row.id), {
+            replacedBy: input.id,
+          });
+        }
+      }
       return NextResponse.json({ ok: true });
     }
 

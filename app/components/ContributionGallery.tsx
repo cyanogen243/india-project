@@ -2,8 +2,13 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import type { Language } from "@/app/lib/content";
 import type { PublicContribution } from "@/app/lib/database";
+
+// A poem at or under this length is shown whole; longer poems cut here and
+// hand off to their read page. Mirrors POEM_TILE_LIMIT server-side.
+const POEM_TILE_LIMIT = 600;
 
 // Writing tiles are coloured from the palette rather than at random, so a poem
 // keeps the same tile every visit.
@@ -15,9 +20,69 @@ function tileColour(id: string) {
   return TILE_COLOURS[total % TILE_COLOURS.length];
 }
 
-function excerpt(body: string) {
-  const trimmed = body.trim();
-  return trimmed.length > 400 ? `${trimmed.slice(0, 400)}…` : trimmed;
+const KIND_GLYPHS: Record<PublicContribution["kind"], React.ReactNode> = {
+  poster: (
+    <svg viewBox="0 0 12 12" aria-hidden="true">
+      <rect x="2" y="3" width="8" height="8" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      <circle cx="6" cy="1.4" r="1.1" fill="currentColor" />
+    </svg>
+  ),
+  image: (
+    <svg viewBox="0 0 12 12" aria-hidden="true">
+      <rect x="1" y="3.5" width="10" height="7" rx="1" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      <circle cx="6" cy="7" r="2.1" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M4.2 3.5 5.1 1.9 h1.8 L7.8 3.5" fill="none" stroke="currentColor" strokeWidth="1.3" />
+    </svg>
+  ),
+  poem: (
+    <svg viewBox="0 0 12 12" aria-hidden="true">
+      <path d="M11 1 6 6" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      <path d="M5.6 6.4 C4.2 6.4 2.6 7.4 2 10 C4.6 9.4 5.6 7.8 5.6 6.4 Z" fill="currentColor" />
+    </svg>
+  ),
+  essay: (
+    <svg viewBox="0 0 12 12" aria-hidden="true">
+      <rect x="4.2" y="1" width="3.6" height="3.2" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <rect x="1.4" y="4.8" width="9.2" height="5" rx="0.6" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M3.6 7.3 h4.8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  ),
+};
+
+const KIND_LABELS: Record<PublicContribution["kind"], { en: string; hi: string }> = {
+  poster: { en: "Poster", hi: "पोस्टर" },
+  image: { en: "Image", hi: "चित्र" },
+  poem: { en: "Poem", hi: "कविता" },
+  essay: { en: "Essay", hi: "लेख" },
+};
+
+function KindTag({ kind, hindi }: { kind: PublicContribution["kind"]; hindi: boolean }) {
+  return (
+    <span className={`tag tag-${kind}`}>
+      {KIND_GLYPHS[kind]}
+      {KIND_LABELS[kind][hindi ? "hi" : "en"]}
+    </span>
+  );
+}
+
+function Credit({ item, hindi }: { item: PublicContribution; hindi: boolean }) {
+  if (item.creditAccount) {
+    // Only https profile links become anchors; bare handles stay text so the
+    // page never links to an attacker-chosen scheme.
+    if (item.creditAccount.startsWith("https://")) {
+      return (
+        <a href={item.creditAccount} target="_blank" rel="noreferrer noopener">
+          {item.creditAccount.replace(/^https:\/\/(www\.)?/, "")}
+        </a>
+      );
+    }
+    return <>{item.creditAccount}</>;
+  }
+  return <>{item.credit || (hindi ? "गुमनाम" : "Anonymous")}</>;
+}
+
+function wordCount(body: string) {
+  return body.trim().split(/\s+/).length;
 }
 
 export function ContributionGallery({
@@ -28,14 +93,18 @@ export function ContributionGallery({
   language: Language;
 }) {
   const hindi = language === "hi";
-  const [filter, setFilter] = useState<"all" | "image" | "writing">("all");
+  const [filter, setFilter] = useState<"all" | PublicContribution["kind"]>("all");
   const visible = items.filter((item) => filter === "all" || item.kind === filter);
 
   const filters = [
     ["all", hindi ? "सब" : "All"],
-    ["image", hindi ? "पोस्टर" : "Posters"],
-    ["writing", hindi ? "लेखन" : "Writing"],
+    ["poster", hindi ? "पोस्टर" : "Posters"],
+    ["image", hindi ? "चित्र" : "Images"],
+    ["poem", hindi ? "कविताएँ" : "Poems"],
+    ["essay", hindi ? "लेख" : "Essays"],
   ] as const;
+
+  const readHref = (id: string) => (hindi ? `/hi/art/${id}` : `/art/${id}`);
 
   return (
     <>
@@ -70,28 +139,64 @@ export function ContributionGallery({
         <div className="gallery-wall">
           {visible.map((item) => {
             const fileUrl = `/api/contributions/${item.id}/file`;
+            const isFile = item.kind === "poster" || item.kind === "image";
+            const poemIsCut = item.kind === "poem" && item.body.length > POEM_TILE_LIMIT;
             return (
-              <article key={item.id} className="gallery-card">
-                {item.kind === "image" ? (
-                  <Image
-                    src={`${fileUrl}?variant=social`}
-                    alt={item.title}
-                    width={item.width ?? 800}
-                    height={item.height ?? 1000}
-                    unoptimized
-                  />
-                ) : (
-                  <div className="gallery-writing" style={{ background: tileColour(item.id) }}>
-                    <h3>{item.title}</h3>
-                    <p>{excerpt(item.body)}</p>
+              <article key={item.id} className="gallery-card" data-kind={item.kind}>
+                {isFile && (
+                  <div className="gallery-art">
+                    <Image
+                      src={`${fileUrl}?variant=social`}
+                      alt={item.title}
+                      width={item.width ?? 800}
+                      height={item.height ?? 1000}
+                      unoptimized
+                    />
                   </div>
                 )}
+
+                {item.kind === "poem" && (
+                  <div className="gallery-tile" style={{ background: tileColour(item.id) }}>
+                    <h3>{item.title}</h3>
+                    {item.subtitle && <p className="tile-sub">{item.subtitle}</p>}
+                    <p className={poemIsCut ? "tile-teaser" : undefined}>
+                      {poemIsCut ? item.body.slice(0, POEM_TILE_LIMIT) : item.body}
+                    </p>
+                    {poemIsCut && (
+                      <Link className="tile-more" href={readHref(item.id)}>
+                        {hindi ? "पूरी कविता पढ़ें →" : "Read the full poem →"}
+                      </Link>
+                    )}
+                  </div>
+                )}
+
+                {item.kind === "essay" && (
+                  <div className="gallery-essay">
+                    <h3>{item.title}</h3>
+                    {item.subtitle && <p className="tile-sub">{item.subtitle}</p>}
+                    <Link className="tile-more" href={readHref(item.id)}>
+                      {hindi ? "पूरा लेख पढ़ें →" : "Read the full essay →"}
+                    </Link>
+                  </div>
+                )}
+
                 <div className="gallery-caption">
                   <div>
-                    {item.kind === "image" && <strong>{item.title}</strong>}
-                    <small>{item.credit || (hindi ? "गुमनाम" : "Anonymous")}</small>
+                    {isFile && <strong>{item.title}</strong>}
+                    <span className="meta-row">
+                      <KindTag kind={item.kind} hindi={hindi} />
+                      <small>
+                        <Credit item={item} hindi={hindi} />
+                        {isFile && item.width && item.height
+                          ? ` · ${item.width}×${item.height}`
+                          : ""}
+                        {item.kind === "essay"
+                          ? ` · ${wordCount(item.body).toLocaleString()} ${hindi ? "शब्द" : "words"}`
+                          : ""}
+                      </small>
+                    </span>
                   </div>
-                  {item.kind === "image" && (
+                  {isFile && (
                     <div className="gallery-downloads">
                       <a href={`${fileUrl}?download=1`} download>
                         {hindi ? "प्रिंट" : "Print"}

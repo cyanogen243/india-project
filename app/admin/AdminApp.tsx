@@ -34,9 +34,12 @@ type Volunteer = {
 
 type Contribution = {
   id: string;
-  kind: "image" | "writing";
+  kind: "poster" | "image" | "poem" | "essay";
   title: string;
+  subtitle: string;
   credit: string;
+  creditAccount: string;
+  seeded: boolean;
   body: string;
   language: string;
   storageKey: string | null;
@@ -781,8 +784,14 @@ function ContributionCard({
         <small>{new Date(contribution.createdAt).toLocaleString()}</small>
       </div>
       <h3>{contribution.title}</h3>
-      <p><strong>Credit:</strong> {contribution.credit || "Not given"}</p>
-      {contribution.kind === "image" && contribution.storageKey && (
+      {contribution.subtitle && <p><em>{contribution.subtitle}</em></p>}
+      <p>
+        <strong>{contribution.kind}</strong>
+        {contribution.seeded ? " · seed" : ""}
+        {" · "}
+        {contribution.creditAccount || contribution.credit || "Anonymous"}
+      </p>
+      {(contribution.kind === "poster" || contribution.kind === "image") && contribution.storageKey && (
         <Image
           src={`/api/contributions/${contribution.id}/file?variant=social`}
           alt={contribution.title}
@@ -792,7 +801,7 @@ function ContributionCard({
           style={{ width: "100%", height: "auto", borderRadius: "0.5rem" }}
         />
       )}
-      {contribution.kind === "writing" && (
+      {(contribution.kind === "poem" || contribution.kind === "essay") && (
         <p style={{ whiteSpace: "pre-wrap" }}>{contribution.body}</p>
       )}
       {contribution.width && contribution.height && (

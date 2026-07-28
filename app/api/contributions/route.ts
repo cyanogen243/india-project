@@ -3,7 +3,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { consumeRateLimit, ensureDatabase, writeAuditEvent } from "@/app/lib/database";
 import {
+  ESSAY_MAX_LENGTH,
   MAX_UPLOAD_BYTES,
+  POEM_MAX_LENGTH,
   contentFingerprint,
   generateRecoveryCode,
   hashRecoveryCode,
@@ -15,10 +17,18 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const fieldsSchema = z.object({
-  kind: z.enum(["image", "writing"]),
+  kind: z.enum(["poster", "image", "poem", "essay"]),
   title: z.string().trim().min(2).max(120),
+  subtitle: z.string().trim().max(120),
+  // Exactly one of these carries a value, depending on the credit choice made
+  // on the form. Both empty is anonymity; both filled is rejected below.
   credit: z.string().trim().max(80),
-  body: z.string().trim().max(8000),
+  creditAccount: z
+    .string()
+    .trim()
+    .max(120)
+    .regex(/^$|^[@a-zA-Z0-9._/:-]+$/, "Handles cannot contain spaces or markup."),
+  body: z.string().max(ESSAY_MAX_LENGTH),
   language: z.enum(["en", "hi"]),
   consent: z.literal("yes"),
   website: z.string().max(0),
@@ -28,10 +38,12 @@ const fieldsSchema = z.object({
 function validationResponse(error: z.ZodError) {
   const field = String(error.issues[0]?.path[0] ?? "");
   const messages: Record<string, string> = {
-    kind: "Choose whether you are sharing artwork or writing.",
+    kind: "Choose what you are sharing.",
     title: "Title must be between 2 and 120 characters.",
-    credit: "Credit must be 80 characters or fewer.",
-    body: "Writing must be 8,000 characters or fewer.",
+    subtitle: "Subtitle must be 120 characters or fewer.",
+    credit: "Name or alias must be 80 characters or fewer.",
+    creditAccount: "Enter a handle or profile link without spaces.",
+    body: "That text is too long.",
     consent: "Confirmation is required before submitting.",
   };
   return NextResponse.json(
@@ -57,13 +69,24 @@ export async function POST(request: NextRequest) {
     const fields = fieldsSchema.parse({
       kind: form.get("kind"),
       title: form.get("title"),
+      subtitle: form.get("subtitle") ?? "",
       credit: form.get("credit") ?? "",
-      body: form.get("body") ?? "",
+      creditAccount: form.get("creditAccount") ?? "",
+      body: String(form.get("body") ?? "").trim(),
       language: form.get("language"),
       consent: form.get("consent"),
       website: form.get("website") ?? "",
       startedAt: form.get("startedAt"),
     });
+
+    // One credit mode at a time: an alias for anonymous work, or a public
+    // account for credited work — never both.
+    if (fields.credit && fields.creditAccount) {
+      return NextResponse.json(
+        { error: "Choose either an alias or a public account, not both." },
+        { status: 400 },
+      );
+    }
 
     // Anything submitted faster than a human could fill the form is accepted
     // silently, so a bot gets no signal about why it failed.
@@ -85,6 +108,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const isFileKind = fields.kind === "poster" || fields.kind === "image";
+
     let storageKey: string | null = null;
     let socialStorageKey: string | null = null;
     let mimeType: string | null = null;
@@ -93,7 +118,7 @@ export async function POST(request: NextRequest) {
     let byteSize: number | null = null;
     let fingerprint: string | null = null;
 
-    if (fields.kind === "image") {
+    if (isFileKind) {
       const file = form.get("file");
       if (!(file instanceof File) || file.size === 0) {
         return NextResponse.json(
@@ -118,14 +143,24 @@ export async function POST(request: NextRequest) {
       height = processed.height;
       byteSize = processed.printBytes.byteLength;
       fingerprint = contentFingerprint(processed.printBytes);
-    } else if (fields.body.length < 4) {
-      // Deliberately low. Devanagari says in a handful of characters what
-      // English needs a sentence for, so a longer floor would reject real
-      // slogans in Hindi while accepting padding in English.
-      return NextResponse.json(
-        { error: "Add a few more characters.", field: "body" },
-        { status: 400 },
-      );
+    } else {
+      // Deliberately low floor: Devanagari says in a handful of characters
+      // what English needs a sentence for.
+      if (fields.body.length < 4) {
+        return NextResponse.json(
+          { error: "Add a few more characters.", field: "body" },
+          { status: 400 },
+        );
+      }
+      if (fields.kind === "poem" && fields.body.length > POEM_MAX_LENGTH) {
+        return NextResponse.json(
+          {
+            error: "Poems can be up to 8,000 characters. Longer work fits as an essay.",
+            field: "body",
+          },
+          { status: 400 },
+        );
+      }
     }
 
     const code = generateRecoveryCode();
@@ -134,16 +169,19 @@ export async function POST(request: NextRequest) {
     const id = randomUUID();
     await db.execute({
       sql: `INSERT INTO contributions
-        (id, kind, title, credit, body, language, storage_key, social_storage_key,
-         mime_type, width, height, byte_size, status, internal_notes,
-         content_fingerprint, recovery_code_hash, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', '', ?, ?, ?, ?)`,
+        (id, kind, title, subtitle, credit, credit_account, body, language,
+         storage_key, social_storage_key, mime_type, width, height, byte_size,
+         status, internal_notes, content_fingerprint, recovery_code_hash,
+         created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', '', ?, ?, ?, ?)`,
       args: [
         id,
         fields.kind,
         fields.title,
+        fields.subtitle,
         fields.credit,
-        fields.kind === "writing" ? fields.body : "",
+        fields.creditAccount,
+        isFileKind ? "" : fields.body,
         fields.language,
         storageKey,
         socialStorageKey,

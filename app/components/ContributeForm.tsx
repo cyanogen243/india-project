@@ -6,6 +6,8 @@ import type { Language } from "@/app/lib/content";
 
 const MAX_BYTES = 4 * 1024 * 1024;
 
+type Kind = "poster" | "image" | "poem" | "essay";
+
 function formatBytes(bytes: number) {
   return bytes < 1024 * 1024
     ? `${Math.round(bytes / 1024)} KB`
@@ -16,13 +18,16 @@ export function ContributeForm({ language }: { language: Language }) {
   const hindi = language === "hi";
   const startedAt = useRef(0);
   const fileInput = useRef<HTMLInputElement>(null);
-  const [kind, setKind] = useState<"image" | "writing">("image");
+  const [kind, setKind] = useState<Kind>("poster");
+  const [credited, setCredited] = useState(false);
   const [preview, setPreview] = useState<{ url: string; name: string; size: number } | null>(null);
   const [dragging, setDragging] = useState(false);
   const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [message, setMessage] = useState("");
   const [recoveryCode, setRecoveryCode] = useState("");
   const [copied, setCopied] = useState(false);
+
+  const isFileKind = kind === "poster" || kind === "image";
 
   useEffect(() => {
     startedAt.current = Date.now();
@@ -93,13 +98,20 @@ export function ContributeForm({ language }: { language: Language }) {
     );
   }
 
+  const kinds: [Kind, string, string][] = [
+    ["poster", hindi ? "पोस्टर" : "Poster", hindi ? "छापने और थामने के लिए" : "Made to print and carry"],
+    ["image", hindi ? "चित्र" : "Image", hindi ? "कलाकृति, चित्रण, फ़ोटो" : "Artwork, illustration, photo"],
+    ["poem", hindi ? "कविता" : "Poem", hindi ? "600 अक्षरों तक पूरी दिखती है" : "Shown in full · up to 600 characters"],
+    ["essay", hindi ? "लेख" : "Essay", hindi ? "दीवार पर शीर्षक और उपशीर्षक" : "Wall shows title + subtitle only"],
+  ];
+
   return (
     <form
       className="contribute-form"
       onSubmit={async (event) => {
         event.preventDefault();
         const form = new FormData(event.currentTarget);
-        if (kind === "image" && !preview) {
+        if (isFileKind && !preview) {
           setState("error");
           setMessage(hindi ? "एक तस्वीर चुनें।" : "Choose an image to share.");
           return;
@@ -109,7 +121,10 @@ export function ContributeForm({ language }: { language: Language }) {
         form.set("kind", kind);
         form.set("language", language);
         form.set("startedAt", String(startedAt.current));
-        if (kind === "writing") form.delete("file");
+        if (!isFileKind) form.delete("file");
+        // One credit mode at a time.
+        if (credited) form.set("credit", "");
+        else form.set("creditAccount", "");
         try {
           const response = await fetch("/api/contributions", { method: "POST", body: form });
           const value = await response.json();
@@ -131,12 +146,7 @@ export function ContributeForm({ language }: { language: Language }) {
       <fieldset className="contribute-kind">
         <legend>{hindi ? "आप क्या साझा कर रहे हैं?" : "What are you sharing?"}</legend>
         <div className="contribute-kind-grid">
-          {(
-            [
-              ["image", hindi ? "पोस्टर या कलाकृति" : "Poster or artwork", hindi ? "PNG, JPEG, WebP" : "PNG, JPEG, WebP"],
-              ["writing", hindi ? "कविता या लेख" : "Poem or writing", hindi ? "सीधे यहाँ लिखें" : "Type it straight in"],
-            ] as const
-          ).map(([value, label, hint]) => (
+          {kinds.map(([value, label, hint]) => (
             <label key={value} className={`contribute-kind-card ${kind === value ? "selected" : ""}`}>
               <input
                 type="radio"
@@ -158,11 +168,7 @@ export function ContributeForm({ language }: { language: Language }) {
       <aside className="contribute-terms">
         <h3>{hindi ? "भेजने से पहले" : "Before you send"}</h3>
         <ul>
-          <li>
-            {hindi
-              ? "केवल अपना बनाया हुआ काम भेजें।"
-              : "Only send work you made yourself."}
-          </li>
+          <li>{hindi ? "केवल अपना बनाया हुआ काम भेजें।" : "Only send work you made yourself."}</li>
           <li>
             {hindi
               ? "स्वीकृत काम CC BY-NC-SA 4.0 के तहत जारी होगा: कोई भी इसे मुफ़्त साझा और रीमिक्स कर सकता है, पर बेच नहीं सकता।"
@@ -181,17 +187,64 @@ export function ContributeForm({ language }: { language: Language }) {
           {hindi ? "शीर्षक" : "Title"}
           <input name="title" required minLength={2} maxLength={120} />
         </label>
-        <label>
-          {hindi ? "श्रेय (वैकल्पिक)" : "Credit (optional)"}
-          <input
-            name="credit"
-            maxLength={80}
-            placeholder={hindi ? "उपनाम, या खाली छोड़ें" : "An alias, or leave blank"}
-          />
-        </label>
+        {!isFileKind && (
+          <label>
+            {hindi ? "उपशीर्षक (वैकल्पिक)" : "Subtitle (optional)"}
+            <input
+              name="subtitle"
+              maxLength={120}
+              placeholder={hindi ? "शीर्षक के नीचे एक पंक्ति" : "A line under the title"}
+            />
+          </label>
+        )}
       </div>
 
-      {kind === "image" ? (
+      <fieldset className="contribute-kind">
+        <legend>{hindi ? "श्रेय" : "Credit"}</legend>
+        <div className="contribute-kind-grid">
+          <label className={`contribute-kind-card ${credited ? "" : "selected"}`}>
+            <input
+              type="radio"
+              name="creditChoice"
+              checked={!credited}
+              onChange={() => setCredited(false)}
+            />
+            <strong>{hindi ? "गुमनाम" : "Anonymous"}</strong>
+            <small>{hindi ? "आपके बारे में कुछ नहीं रखा जाता" : "Nothing about you is stored"}</small>
+          </label>
+          <label className={`contribute-kind-card ${credited ? "selected" : ""}`}>
+            <input
+              type="radio"
+              name="creditChoice"
+              checked={credited}
+              onChange={() => setCredited(true)}
+            />
+            <strong>{hindi ? "सार्वजनिक श्रेय दें" : "Credit me publicly"}</strong>
+            <small>{hindi ? "एक सार्वजनिक खाता, दीवार पर दिखेगा" : "A public account, shown on the wall"}</small>
+          </label>
+        </div>
+        {credited ? (
+          <label className="contribute-credit-field">
+            {hindi ? "सार्वजनिक खाता" : "Public account"}
+            <input
+              name="creditAccount"
+              maxLength={120}
+              placeholder={hindi ? "@हैंडल — X, Instagram या Bluesky" : "@handle — X, Instagram or Bluesky"}
+            />
+          </label>
+        ) : (
+          <label className="contribute-credit-field">
+            {hindi ? "नाम या उपनाम (वैकल्पिक)" : "Name or alias (optional)"}
+            <input
+              name="credit"
+              maxLength={80}
+              placeholder={hindi ? "खाली छोड़ने पर 'गुमनाम' दिखेगा" : "Left blank, the wall shows “Anonymous”"}
+            />
+          </label>
+        )}
+      </fieldset>
+
+      {isFileKind ? (
         <div
           className={`contribute-dropzone ${dragging ? "dragging" : ""} ${preview ? "filled" : ""}`}
           onDragOver={(event) => {
@@ -259,20 +312,27 @@ export function ContributeForm({ language }: { language: Language }) {
         </div>
       ) : (
         <label>
-          {hindi ? "आपका लेखन" : "Your writing"}
-          <textarea name="body" rows={12} minLength={4} maxLength={8000} required />
+          {kind === "poem" ? (hindi ? "आपकी कविता" : "Your poem") : hindi ? "आपका लेख" : "Your essay"}
+          <textarea
+            name="body"
+            rows={12}
+            minLength={4}
+            maxLength={kind === "poem" ? 8000 : 40000}
+            required
+          />
         </label>
       )}
 
-      <p className="contribute-privacy">
-        <strong>{hindi ? "हम फ़ाइल दोबारा बनाते हैं।" : "We rebuild the file."}</strong>{" "}
-        {hindi
-          ? "इससे उसमें छिपी जानकारी हट जाती है — जैसे कैमरे का दर्ज किया हुआ स्थान, या डिज़ाइन सॉफ़्टवेयर का लिखा आपका नाम।"
-          : "That removes hidden information it may carry — the location a camera recorded, or your name written in by design software."}
-      </p>
+      {isFileKind && (
+        <p className="contribute-privacy">
+          <strong>{hindi ? "हम फ़ाइल दोबारा बनाते हैं।" : "We rebuild the file."}</strong>{" "}
+          {hindi
+            ? "इससे उसमें छिपी जानकारी हट जाती है — जैसे कैमरे का दर्ज किया हुआ स्थान, या डिज़ाइन सॉफ़्टवेयर का लिखा आपका नाम।"
+            : "That removes hidden information it may carry — the location a camera recorded, or your name written in by design software."}
+        </p>
+      )}
 
-      {/* Left empty by people and filled in by bots. Uses the same hidden
-          wrapper as the volunteer form so it stays off-screen for everyone. */}
+      {/* Left empty by people and filled in by bots. */}
       <label className="honeypot" aria-hidden="true">
         Website
         <input name="website" tabIndex={-1} autoComplete="off" />

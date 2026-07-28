@@ -145,9 +145,11 @@ export const contributions = sqliteTable(
   "contributions",
   {
     id: text("id").primaryKey(),
-    kind: text("kind", { enum: ["image", "writing"] }).notNull(),
+    kind: text("kind", { enum: ["poster", "image", "poem", "essay"] }).notNull(),
     title: text("title").notNull(),
+    subtitle: text("subtitle").notNull().default(""),
     credit: text("credit").notNull().default(""),
+    creditAccount: text("credit_account").notNull().default(""),
     body: text("body").notNull().default(""),
     language: text("language", { enum: ["en", "hi"] }).notNull(),
     storageKey: text("storage_key"),
@@ -163,6 +165,7 @@ export const contributions = sqliteTable(
       .default("pending"),
     internalNotes: text("internal_notes").notNull().default(""),
     contentFingerprint: text("content_fingerprint"),
+    seeded: integer("seeded", { mode: "boolean" }).notNull().default(false),
     declineReason: text("decline_reason", {
       enum: [
         "off_topic",
