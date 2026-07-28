@@ -63,8 +63,8 @@ export function ContributeForm({ language }: { language: Language }) {
         <h2>{hindi ? "आपका योगदान कतार में है" : "Your contribution is in the queue"}</h2>
         <p>
           {hindi
-            ? "एक स्वयंसेवक इसकी समीक्षा करेगा। मंज़ूरी मिलने तक यह सार्वजनिक नहीं होगा।"
-            : "A volunteer will review it. Nothing appears publicly until it is approved."}
+            ? "एक स्वयंसेवक की समीक्षा के बाद ही यह सार्वजनिक होगा।"
+            : "A volunteer will review it before anything appears publicly."}
         </p>
 
         <div className="contribute-code-block">
@@ -86,13 +86,8 @@ export function ContributeForm({ language }: { language: Language }) {
 
         <p className="contribute-warning">
           {hindi
-            ? "यह दोबारा नहीं दिखाया जाएगा। हम आपका नाम या ईमेल नहीं रखते, इसलिए कोड खोने पर उसे वापस नहीं पाया जा सकता।"
-            : "This will not be shown again. We hold no name or email for you, so a lost code cannot be recovered."}
-        </p>
-        <p>
-          {hindi
-            ? "इस कोड से आप स्थिति देख सकते हैं या अपना योगदान हटा सकते हैं।"
-            : "Use it to check the status of your contribution, or to take it down."}
+            ? "यह दोबारा नहीं दिखेगा — हम नाम या ईमेल नहीं रखते, इसलिए खोया कोड वापस नहीं मिलता। इससे स्थिति देखें, या योगदान हटाकर सुधरा हुआ दोबारा भेजें।"
+            : "It's shown once — we hold no name or email, so a lost code can't be recovered. Use it to check status, or to take your work down and send a corrected version."}
         </p>
       </div>
     );
