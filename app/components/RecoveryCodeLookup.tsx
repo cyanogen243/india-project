@@ -116,7 +116,7 @@ export function RecoveryCodeLookup({ language }: { language: Language }) {
           <p>
             <small>
               {hindi ? "भेजा गया: " : "Sent: "}
-              {new Date(submission.createdAt).toLocaleDateString()}
+              {new Date(submission.createdAt).toLocaleDateString(hindi ? "hi-IN" : "en-IN")}
             </small>
           </p>
           {submission.status !== "withdrawn" && (

@@ -2487,6 +2487,9 @@ footer p {
 
 .contribute-receipt {
   display: grid;
+  /* The receipt replaces the form beside a tall sidebar; without this the
+     stretched grid spaces its few rows across the whole height. */
+  align-content: start;
   gap: 0.9rem;
   padding: clamp(1.4rem, 5vw, 2.4rem);
   border: 1px solid var(--ink);
