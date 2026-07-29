@@ -50,7 +50,10 @@ export async function purgeExpired({ dryRun = false, now = new Date() } = {}) {
         args: [cutoff, row.id],
       });
     }
-    console.log(`${dryRun ? "would purge" : "purged"} files for ${row.status}: ${row.title}`);
+    // Ids, never titles: contributor-authored titles include work declined
+    // precisely because it identified someone, and stdout ends up in a log
+    // aggregator with its own retention and its own access rules.
+    console.log(`${dryRun ? "would purge" : "purged"} files for ${row.status} ${row.id}`);
   }
 
   // Volunteer submissions carry the same retention date, set when a moderator
@@ -60,7 +63,7 @@ export async function purgeExpired({ dryRun = false, now = new Date() } = {}) {
   // notes were retained indefinitely. That is the most identifying data the
   // project holds — more so since the city field was added.
   const expiredVolunteers = await db.execute({
-    sql: `SELECT id, name FROM volunteer_submissions
+    sql: `SELECT id FROM volunteer_submissions
           WHERE retention_eligible_at IS NOT NULL AND retention_eligible_at <= ?`,
     args: [cutoff],
   });
@@ -71,9 +74,9 @@ export async function purgeExpired({ dryRun = false, now = new Date() } = {}) {
         args: [row.id],
       });
     }
-    // The name is logged, not the contact details, so an operator can see the
-    // sweep worked without the log becoming the thing it just deleted.
-    console.log(`${dryRun ? "would remove" : "removed"} volunteer submission: ${row.name}`);
+    // The id, not the name: the name is the identity, which is the whole
+    // reason this row is being deleted.
+    console.log(`${dryRun ? "would remove" : "removed"} volunteer submission ${row.id}`);
   }
 
   // Rate-limit rows are keyed on an HMAC of the caller's IP and stamped with

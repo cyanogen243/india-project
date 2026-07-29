@@ -343,7 +343,12 @@ export async function loadApprovedContributions(): Promise<PublicContribution[]>
     language: String(row.language),
     width: row.width === null ? null : Number(row.width),
     height: row.height === null ? null : Number(row.height),
-    createdAt: String(row.created_at),
+    // Coarsened to the day. The gallery never renders this, but every prop of
+    // a client component is serialised into the public HTML — and an exact
+    // submission millisecond next to a network log is a direct link from a
+    // poster to whoever uploaded it. Ordering still uses the precise value in
+    // the query above.
+    createdAt: String(row.created_at).slice(0, 10),
   }));
 }
 
@@ -375,7 +380,12 @@ export async function loadApprovedText(id: string): Promise<PublicContribution |
     language: String(row.language),
     width: null,
     height: null,
-    createdAt: String(row.created_at),
+    // Coarsened to the day. The gallery never renders this, but every prop of
+    // a client component is serialised into the public HTML — and an exact
+    // submission millisecond next to a network log is a direct link from a
+    // poster to whoever uploaded it. Ordering still uses the precise value in
+    // the query above.
+    createdAt: String(row.created_at).slice(0, 10),
   };
 }
 

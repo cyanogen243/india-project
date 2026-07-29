@@ -25,6 +25,13 @@ const ESSAY_TEASER_LIMIT = 240;
 
 // Cutting by code unit can orphan a combining mark or split a surrogate pair,
 // which renders as a broken glyph. Segmenting first cuts on real characters.
+function countGraphemes(value: string) {
+  const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+  let total = 0;
+  for (const _ of segmenter.segment(value)) total += 1;
+  return total;
+}
+
 function cutGraphemes(value: string, limit: number) {
   const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
   const out: string[] = [];
@@ -200,9 +207,15 @@ export function ContributionGallery({
             const fileUrl = `/api/contributions/${item.id}/file`;
             const isFile = item.kind === "poster" || item.kind === "image";
             const poemLines = item.kind === "poem" ? item.body.split("\n") : [];
+            // Measured in the same unit the cut uses. Counting UTF-16 units
+            // here over-measured Devanagari — roughly 1.6 units per visible
+            // letter — so a Hindi poem could trip the limit, then be "cut" to
+            // a grapheme budget larger than the poem, rendering it whole with
+            // a "read the full poem" link to identical text underneath.
+            const poemGraphemes = item.kind === "poem" ? countGraphemes(item.body) : 0;
             const poemIsCut =
               item.kind === "poem" &&
-              (item.body.length > POEM_TILE_LIMIT || poemLines.length > POEM_TILE_LINES);
+              (poemGraphemes > POEM_TILE_LIMIT || poemLines.length > POEM_TILE_LINES);
             return (
               <article key={item.id} className="gallery-card" data-kind={item.kind}>
                 {isFile && (

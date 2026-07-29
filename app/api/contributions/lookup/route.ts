@@ -13,21 +13,26 @@ const lookupSchema = z.object({
 });
 
 function remoteIdentifier(request: NextRequest) {
-  // Cloudflare sets CF-Connecting-IP itself and appends the client to any
-  // inbound X-Forwarded-For, so trusting the first XFF element lets a caller
-  // choose their own rate-limit bucket. Prefer the header the edge controls;
-  // fall back to the last XFF element, which is the one the nearest proxy
-  // appended rather than anything the client sent.
+  // Only headers the hosting platform sets and overwrites can be trusted.
+  // CF-Connecting-IP was previously consulted first and taken from the inbound
+  // request with no proof the request came through Cloudflare — on this
+  // deployment anyone could send it and pick their own bucket, which voided
+  // both the upload limit and the lookup limit that protects recovery codes.
+  // It is used only when the platform is actually Cloudflare.
+  const behindCloudflare = process.env.ART_TRUSTED_PROXY === "cloudflare";
+  if (behindCloudflare) {
+    const edge = request.headers.get("cf-connecting-ip");
+    if (edge) return edge;
+  }
+  // Otherwise take the LAST X-Forwarded-For element: a proxy appends the peer
+  // it actually saw, so trailing entries are the platform's, while anything a
+  // caller prepends sits at the front.
   const forwarded = request.headers
     .get("x-forwarded-for")
     ?.split(",")
     .map((part) => part.trim())
     .filter(Boolean);
-  return (
-    request.headers.get("cf-connecting-ip") ||
-    forwarded?.[forwarded.length - 1] ||
-    "unknown"
-  );
+  return forwarded?.[forwarded.length - 1] || "unknown";
 }
 
 export async function POST(request: NextRequest) {
@@ -72,9 +77,18 @@ export async function POST(request: NextRequest) {
         if (typeof key === "string" && key) await deleteObject(key);
       }
       const now = new Date();
+      // For a poem or an essay the body IS the work, so nulling the storage
+      // keys removed nothing: the full text stayed in the row, was still
+      // served to every moderator, and outlived the retention date because the
+      // sweep only looks at rows that still have a storage key. Someone who
+      // takes their writing down — plausibly because it puts them at risk —
+      // gets it erased here, which is what the UI already promises.
       await db.execute({
         sql: `UPDATE contributions
               SET status = 'withdrawn', storage_key = NULL, social_storage_key = NULL,
+                  body = '', title = '(withdrawn)', subtitle = '',
+                  credit = '', credit_account = '', source_url = '',
+                  content_fingerprint = NULL,
                   updated_at = ?, retention_eligible_at = ?
               WHERE id = ?`,
         args: [
@@ -108,7 +122,9 @@ export async function POST(request: NextRequest) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: "Enter the code you were given." }, { status: 400 });
     }
-    const message = error instanceof Error ? error.message : "Unable to look that up.";
-    return NextResponse.json({ error: message }, { status: 400 });
+    // Never echoed: a storage failure here carries the bucket name and
+    // endpoint, and a database failure carries schema detail.
+    console.error("contribution lookup failed", error);
+    return NextResponse.json({ error: "Unable to look that up." }, { status: 400 });
   }
 }

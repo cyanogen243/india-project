@@ -80,6 +80,11 @@ export function contentFingerprint(bytes: Uint8Array) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
+// Longest edge of the stored print variant, and a hard ceiling on what any
+// single contribution may occupy in the bucket.
+const PRINT_MAX_EDGE = 3000;
+const MAX_STORED_BYTES = 12 * 1024 * 1024;
+
 const SOCIAL_WIDTH = 1080;
 const SOCIAL_HEIGHT = 1350;
 
@@ -148,12 +153,21 @@ export async function processImage(input: Uint8Array): Promise<ProcessedImage> {
     throw new Error("That image could not be read.");
   }
 
+  // Bounded on the way out, not just on the way in. A 3 MB upload of a 49 MP
+  // image re-encodes to a ~76 MB lossless PNG — 24x amplification — and every
+  // one of those sits in the bucket. Print work does not need more than this
+  // edge: 3000px is a 25cm print at 300dpi, comfortably past what the wall or
+  // a home printer uses.
   const printBytes = new Uint8Array(
     await sharp(Buffer.from(input), { failOn: "error", limitInputPixels: MAX_INPUT_PIXELS })
       .rotate()
+      .resize(PRINT_MAX_EDGE, PRINT_MAX_EDGE, { fit: "inside", withoutEnlargement: true })
       .png({ compressionLevel: 9 })
       .toBuffer(),
   );
+  if (printBytes.byteLength > MAX_STORED_BYTES) {
+    throw new Error("Only PNG, JPEG and WebP images are accepted.");
+  }
 
   const socialBytes = new Uint8Array(
     await sharp(Buffer.from(input), { failOn: "error", limitInputPixels: MAX_INPUT_PIXELS })

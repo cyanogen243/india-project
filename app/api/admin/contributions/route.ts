@@ -58,6 +58,30 @@ export async function POST(request: NextRequest) {
       status: form.get("status") ?? "approved",
     });
 
+    // An admin still on a temporary password can mutate nothing else; this
+    // route is the one that publishes straight to the public wall, so it is
+    // the last place that gate should be missing.
+    if (user.mustChangePassword) {
+      return NextResponse.json({ error: "Change your password first." }, { status: 403 });
+    }
+    // One credit mode at a time, and someone else's work is never credited to
+    // one of our accounts — the same two rules the public form enforces. The
+    // wall prefers creditAccount over credit, so without this a curated
+    // public-domain photograph could display our handle in place of the author
+    // whose attribution is the entire point of the record.
+    if (fields.credit && fields.creditAccount) {
+      return NextResponse.json(
+        { error: "Choose either an alias or a public account, not both." },
+        { status: 400 },
+      );
+    }
+    if (fields.provenance === "public_domain" && fields.creditAccount) {
+      return NextResponse.json(
+        { error: "Someone else's work cannot be credited to an account here." },
+        { status: 400 },
+      );
+    }
+
     // Same standard as the public form: a public-domain claim needs an author
     // and a link, or it is unverifiable.
     if (fields.provenance === "public_domain") {

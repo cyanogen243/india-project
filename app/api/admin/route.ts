@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { ESSAY_MAX_LENGTH } from "@/app/lib/contributions";
+import { ESSAY_MAX_LENGTH, POEM_MAX_LENGTH } from "@/app/lib/contributions";
 import {
   assertCsrf,
   clearSessionCookie,
@@ -298,6 +298,8 @@ export async function POST(request: NextRequest) {
           // A poem edited past the poem cap, or a body emptied entirely, would
           // produce a record the public form refuses — an empty tile, and a
           // word count that reads "1 words".
+          // Kind-aware below: this is the wider of the two caps, and a poem is
+          // checked against POEM_MAX_LENGTH once `previous.kind` is known.
           body: z.string().min(4).max(ESSAY_MAX_LENGTH).optional(),
           declineReason: z
             .enum([
@@ -316,12 +318,10 @@ export async function POST(request: NextRequest) {
       // Moderator edits go through the same content invariants the public form
       // enforces, so an inline edit cannot produce a record the form would
       // have refused: one credit mode, and a body within its kind's limits.
-      if (input.credit && input.creditAccount) {
-        return NextResponse.json(
-          { error: "Choose either an alias or a public account, not both." },
-          { status: 400 },
-        );
-      }
+      // Checked against the row this write would produce, not the fields the
+      // request happened to include: sending only `credit` against a row that
+      // already has an account left both set, which is exactly the state this
+      // guard exists to prevent.
       if (input.status === "declined" && !input.declineReason) {
         return NextResponse.json(
           { error: "Choose a reason so the contributor knows why." },
@@ -337,6 +337,24 @@ export async function POST(request: NextRequest) {
       const previous = existing.rows[0];
       if (!previous) {
         return NextResponse.json({ error: "Contribution not found." }, { status: 404 });
+      }
+      if (
+        input.body !== undefined &&
+        previous.kind === "poem" &&
+        input.body.length > POEM_MAX_LENGTH
+      ) {
+        return NextResponse.json(
+          { error: "That poem is longer than the form allows." },
+          { status: 400 },
+        );
+      }
+      const mergedCredit = input.credit ?? String(previous.credit ?? "");
+      const mergedAccount = input.creditAccount ?? String(previous.credit_account ?? "");
+      if (mergedCredit && mergedAccount) {
+        return NextResponse.json(
+          { error: "Choose either an alias or a public account, not both." },
+          { status: 400 },
+        );
       }
       // Withdrawal and the retention sweep both delete the stored objects and
       // null the keys. Approving such a row again would put a permanently

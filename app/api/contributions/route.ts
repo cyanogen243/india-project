@@ -127,21 +127,26 @@ function validationResponse(error: z.ZodError, language: string) {
 
 
 function remoteIdentifier(request: NextRequest) {
-  // Cloudflare sets CF-Connecting-IP itself and appends the client to any
-  // inbound X-Forwarded-For, so trusting the first XFF element lets a caller
-  // choose their own rate-limit bucket. Prefer the header the edge controls;
-  // fall back to the last XFF element, which is the one the nearest proxy
-  // appended rather than anything the client sent.
+  // Only headers the hosting platform sets and overwrites can be trusted.
+  // CF-Connecting-IP was previously consulted first and taken from the inbound
+  // request with no proof the request came through Cloudflare — on this
+  // deployment anyone could send it and pick their own bucket, which voided
+  // both the upload limit and the lookup limit that protects recovery codes.
+  // It is used only when the platform is actually Cloudflare.
+  const behindCloudflare = process.env.ART_TRUSTED_PROXY === "cloudflare";
+  if (behindCloudflare) {
+    const edge = request.headers.get("cf-connecting-ip");
+    if (edge) return edge;
+  }
+  // Otherwise take the LAST X-Forwarded-For element: a proxy appends the peer
+  // it actually saw, so trailing entries are the platform's, while anything a
+  // caller prepends sits at the front.
   const forwarded = request.headers
     .get("x-forwarded-for")
     ?.split(",")
     .map((part) => part.trim())
     .filter(Boolean);
-  return (
-    request.headers.get("cf-connecting-ip") ||
-    forwarded?.[forwarded.length - 1] ||
-    "unknown"
-  );
+  return forwarded?.[forwarded.length - 1] || "unknown";
 }
 
 // SQLite stores text up to the first NUL byte, so a value that passes
@@ -264,6 +269,17 @@ export async function POST(request: NextRequest) {
       }
       const input = new Uint8Array(await file.arrayBuffer());
       const processed = await processImage(input);
+      // Spent here: after everything that can legitimately fail (format,
+      // size, decode), and before the first byte reaches the bucket. Earlier
+      // and a refused file cost the visitor an hour having stored nothing;
+      // later and a request losing the race left orphaned objects no sweep
+      // could ever reach.
+      if (!(await consumeRateLimit("contribution-submit", identifier, 5, 60 * 60 * 1000))) {
+        return NextResponse.json(
+          { error: say(fields.language, MESSAGES.rateLimited) },
+          { status: 429 },
+        );
+      }
       await putObject(processed.printKey, processed.printBytes, processed.mimeType);
       await putObject(processed.socialKey, processed.socialBytes, "image/jpeg");
       storageKey = processed.printKey;
@@ -293,13 +309,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const allowed = await consumeRateLimit(
-      "contribution-submit",
-      identifier,
-      5,
-      60 * 60 * 1000,
-    );
-    if (!allowed) {
+    // Spent before anything is written to the bucket. Uploading first and
+    // checking after meant a request that lost the race returned 429 with its
+    // two objects already stored and no row to reference them — unreachable by
+    // the retention sweep, which walks rows, and so permanent.
+    if (!isFileKind && !(await consumeRateLimit("contribution-submit", identifier, 5, 60 * 60 * 1000))) {
       return NextResponse.json(
         { error: say(fields.language, MESSAGES.rateLimited) },
         { status: 429 },

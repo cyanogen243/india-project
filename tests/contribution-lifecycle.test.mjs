@@ -294,9 +294,12 @@ test("an uploaded image is private while pending and deleted on withdrawal", asy
   const afterWithdrawal = await fetch(`${baseUrl}/api/contributions/${row.id}/file?variant=social`);
   assert.equal(afterWithdrawal.status, 404, "withdrawn files stop being served");
 
-  const cleared = await rowByTitle(title);
-  assert.equal(cleared.storage_key, null, "withdrawal clears the stored keys");
-  assert.equal(cleared.social_storage_key, null);
+  const cleared = await db.execute({
+    sql: "SELECT storage_key, social_storage_key FROM contributions WHERE id = ?",
+    args: [String(row.id)],
+  });
+  assert.equal(cleared.rows[0].storage_key, null, "withdrawal clears the stored keys");
+  assert.equal(cleared.rows[0].social_storage_key, null);
 
   const repeated = await lookup(code, "withdraw");
   assert.equal(repeated.status, 409, "withdrawing twice is refused");
@@ -1256,4 +1259,102 @@ test("the retention sweep clears volunteer submissions too", async () => {
   // A volunteer with no retention date is untouched.
   const active = await db.execute("SELECT count(*) AS total FROM volunteer_submissions");
   assert.ok(Number(active.rows[0].total) >= 0);
+});
+
+test("withdrawing writing erases the writing", async () => {
+  const title = "Test Withdraw Erases Text";
+  const body = "A verse the author later needs gone, word for word.";
+  const sent = await submit({ kind: "poem", title, body, credit: "A Contributor" });
+  assert.equal(sent.status, 201);
+  const row = await rowByTitle(title);
+  const session = await adminSession();
+  await moderate(session, { id: String(row.id), status: "approved", internalNotes: "" });
+  assert.equal((await lookup(sent.body.recoveryCode, "withdraw")).status, 200);
+
+  // Nulling the storage keys removed nothing for a poem: the body IS the work.
+  const after = await db.execute({
+    sql: "SELECT body, title, credit, credit_account FROM contributions WHERE id = ?",
+    args: [String(row.id)],
+  });
+  assert.equal(after.rows[0].body, "", "the text is gone from the row");
+  assert.doesNotMatch(String(after.rows[0].title), /Withdraw Erases/, "and so is the title");
+  assert.equal(after.rows[0].credit, "", "and the credit");
+
+  // A moderator loading the panel must not receive it either.
+  const panel = await fetch(`${baseUrl}/api/admin`, { headers: { cookie: session.cookie } });
+  assert.doesNotMatch(JSON.stringify(await panel.json()), new RegExp(body.slice(0, 20)));
+});
+
+test("the public payload does not carry a submission timestamp", async () => {
+  const title = "Test Timestamp Precision";
+  const sent = await submit({ kind: "poem", title, body: "A poem whose upload time is nobody's business." });
+  const row = await rowByTitle(title);
+  const session = await adminSession();
+  await moderate(session, { id: String(row.id), status: "approved", internalNotes: "" });
+
+  // An exact millisecond next to a network log links a poster to an uploader.
+  const wall = await (await fetch(`${baseUrl}/art`)).text();
+  assert.match(wall, new RegExp(title), "the work is on the wall");
+  const stamp = String(row.created_at);
+  assert.doesNotMatch(wall, new RegExp(stamp.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+    "the exact submission instant is not in the page");
+  assert.doesNotMatch(wall, /\d{2}:\d{2}:\d{2}\.\d{3}Z/, "no millisecond timestamps at all");
+});
+
+test("a stored image is bounded, not just the upload", async () => {
+  // A 4 MB upload could re-encode to a ~76 MB lossless PNG and sit in the
+  // bucket at that size; the input cap alone did not bound what we store.
+  const bytes = await readFile("content/seed-art/image-breaking-the-salt-law.jpg");
+  const title = "Test Stored Size";
+  const sent = await submit({ kind: "image", title }, { bytes, type: "image/jpeg", name: "p.jpg" });
+  assert.equal(sent.status, 201);
+  const row = await rowByTitle(title);
+  assert.ok(Number(row.byte_size) < 12 * 1024 * 1024, `stored print is bounded (${row.byte_size})`);
+  assert.ok(Number(row.width) <= 3000 && Number(row.height) <= 3000,
+    `stored dimensions are bounded (${row.width}x${row.height})`);
+});
+
+test("curation holds to the same credit rules as the public form", async () => {
+  const session = await adminSession();
+  const bytes = await readFile("content/seed-art/poster-sunrise.png");
+  const both = await addDirectly(
+    session,
+    {
+      kind: "poster", title: "Test Curate Both Credits", subtitle: "",
+      credit: "An Author", creditAccount: "@ourhandle", body: "", language: "en", status: "approved",
+    },
+    { bytes, type: "image/png", name: "p.png" },
+  );
+  assert.equal(both.status, 400, "an alias and an account together is refused here too");
+
+  const pdAccount = await addDirectly(
+    session,
+    {
+      kind: "image", title: "Test Curate PD Account", subtitle: "",
+      credit: "", creditAccount: "@ourhandle", provenance: "public_domain",
+      sourceUrl: "https://commons.example/file", body: "", language: "en", status: "approved",
+    },
+    { bytes, type: "image/png", name: "p2.png" },
+  );
+  assert.equal(pdAccount.status, 400, "someone else's work is never credited to our account");
+});
+
+test("a moderator edit cannot produce a row the public form would refuse", async () => {
+  const title = "Test Merged Invariants";
+  const sent = await submit({ kind: "poem", title, body: "A poem to edit.", creditAccount: "@theirhandle" });
+  assert.equal(sent.status, 201);
+  const row = await rowByTitle(title);
+  const session = await adminSession();
+
+  // Sending only `credit` against a row that already holds an account left
+  // both set — the guard checked the request rather than the resulting row.
+  const sneaked = await moderate(session, {
+    id: String(row.id), status: "pending", internalNotes: "", credit: "An Alias",
+  });
+  assert.equal(sneaked.status, 400, "the merged row is checked, not just the request");
+
+  const tooLong = await moderate(session, {
+    id: String(row.id), status: "pending", internalNotes: "", body: "x".repeat(9000),
+  });
+  assert.equal(tooLong.status, 400, "a poem cannot be edited past the poem cap");
 });
