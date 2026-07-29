@@ -497,37 +497,44 @@ export async function consumeRateLimit(
   const keyHash = createHmac("sha256", secret)
     .update(`${action}:${identifier}`)
     .digest("hex");
-  const existing = await db.execute({
-    sql: "SELECT count, expires_at FROM rate_limits WHERE key_hash = ?",
-    args: [keyHash],
+  const nowIso = new Date(now).toISOString();
+  const expiresIso = new Date(now + windowMs).toISOString();
+
+  // Every decision below is made inside a single statement's WHERE clause, so
+  // the check and the increment cannot be separated. Reading the count and
+  // then updating it — the obvious shape — let concurrent requests all read
+  // the same under-limit count and all pass: a hundred at once against a
+  // limit of ten were a hundred accepted. That is the difference between a
+  // rate limit and a suggestion, and it mattered most on recovery-code lookup,
+  // where the limit is the only thing standing between a guessable code and an
+  // irreversible withdrawal.
+
+  // 1. A live window with room left: take a slot.
+  const takeSlot = {
+    sql: `UPDATE rate_limits SET count = count + 1
+          WHERE key_hash = ? AND expires_at > ? AND count < ?`,
+    args: [keyHash, nowIso, limit],
+  };
+  if ((await db.execute(takeSlot)).rowsAffected > 0) return true;
+
+  // 2. No such window. Open one — but only if the stored window has actually
+  //    lapsed, so a request that just found the limit full cannot reset it.
+  const openWindow = await db.execute({
+    sql: `INSERT INTO rate_limits
+      (key_hash, action, count, window_started_at, expires_at)
+      VALUES (?, ?, 1, ?, ?)
+      ON CONFLICT(key_hash) DO UPDATE SET
+        action = excluded.action, count = 1,
+        window_started_at = excluded.window_started_at,
+        expires_at = excluded.expires_at
+      WHERE rate_limits.expires_at <= ?`,
+    args: [keyHash, action, nowIso, expiresIso, nowIso],
   });
-  const row = existing.rows[0];
-  const expiresAt = row ? Date.parse(String(row.expires_at)) : 0;
-  if (!row || expiresAt <= now) {
-    await db.execute({
-      sql: `INSERT INTO rate_limits
-        (key_hash, action, count, window_started_at, expires_at)
-        VALUES (?, ?, 1, ?, ?)
-        ON CONFLICT(key_hash) DO UPDATE SET
-          action = excluded.action, count = 1,
-          window_started_at = excluded.window_started_at,
-          expires_at = excluded.expires_at`,
-      args: [
-        keyHash,
-        action,
-        new Date(now).toISOString(),
-        new Date(now + windowMs).toISOString(),
-      ],
-    });
-    return true;
-  }
-  const count = Number(row.count);
-  if (count >= limit) return false;
-  await db.execute({
-    sql: "UPDATE rate_limits SET count = count + 1 WHERE key_hash = ?",
-    args: [keyHash],
-  });
-  return true;
+  if (openWindow.rowsAffected > 0) return true;
+
+  // 3. Someone opened the window between our two statements. Take a slot from
+  //    theirs rather than denying a request that arrived in a fresh window.
+  return (await db.execute(takeSlot)).rowsAffected > 0;
 }
 
 export function hashToken(value: string) {

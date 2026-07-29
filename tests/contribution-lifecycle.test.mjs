@@ -378,9 +378,17 @@ test("the retention sweep clears files once their date has passed", async () => 
   );
   assert.equal(sweep.status, 0, sweep.stderr || sweep.stdout);
 
-  const purged = await rowByTitle(title);
+  // By id, not title: the sweep erases the contributor-authored title along
+  // with the rest of the text, so the row is deliberately no longer findable
+  // by what they called it.
+  const { rows } = await db.execute({
+    sql: "SELECT * FROM contributions WHERE id = ?",
+    args: [declined.id],
+  });
+  const purged = rows[0];
   assert.equal(purged.storage_key, null, "the sweep removes the stored file");
   assert.equal(purged.social_storage_key, null);
+  assert.notEqual(purged.title, title, "and the title that described it");
   assert.equal(purged.status, "declined", "the row survives so the code still reports the outcome");
 });
 
@@ -1390,4 +1398,170 @@ test("a poster is kept printable at A3, in a format that suits it", async () => 
     "image/jpeg",
     "and it is served as what it actually is",
   );
+});
+
+test("a rate limit holds under concurrency, not just in sequence", async () => {
+  // Read-then-write let every concurrent request see the same under-limit
+  // count and all pass. Recovery-code lookup is the reason this matters: the
+  // limit is the only thing between a guessable code and an irreversible
+  // withdrawal, and a hundred parallel guesses used to cost the price of one.
+  const attempts = 100;
+  const results = await Promise.all(
+    Array.from({ length: attempts }, () => lookup("ZZZZZZZZ", "status")),
+  );
+  const accepted = results.filter((r) => r.status !== 429).length;
+  const refused = results.filter((r) => r.status === 429).length;
+
+  assert.equal(accepted + refused, attempts, "every request got a verdict");
+  // The endpoint allows 10 per quarter hour. Concurrency must not buy a
+  // single extra attempt, so this is the exact limit, not a loose fraction of
+  // the burst — a check that only asserted "most were refused" would still
+  // pass if the race let through twenty.
+  assert.ok(
+    accepted <= 10,
+    `${accepted} of ${attempts} concurrent guesses passed a limit of 10`,
+  );
+  assert.ok(refused > 0, "the burst was actually rate limited at all");
+
+  const { rows } = await db.execute(
+    "SELECT count FROM rate_limits WHERE action = 'contribution-lookup'",
+  );
+  if (rows.length > 0) {
+    assert.ok(
+      Number(rows[0].count) <= accepted,
+      "the stored count never exceeds what was actually let through",
+    );
+  }
+});
+
+test("declined writing is erased on the same schedule as declined images", async () => {
+  // The sweep selected only rows holding a storage key, so poems and essays
+  // were never examined: a poem declined for naming someone kept its text,
+  // title and credit indefinitely, while the identical decision about a poster
+  // was honoured within 180 days.
+  const title = "Test Poem For Retention";
+  const body = "A verse that named somebody it should not have.";
+  await submit({ kind: "poem", title, body, credit: "Test Alias" });
+  const row = await rowByTitle(title);
+  const session = await adminSession();
+  await moderate(session, {
+    id: String(row.id),
+    status: "declined",
+    declineReason: "identifying_info",
+    internalNotes: "",
+  });
+
+  const declined = await rowByTitle(title);
+  assert.equal(declined.storage_key, null, "writing never had a stored file");
+  assert.ok(declined.retention_eligible_at, "declining stamps a retention date all the same");
+
+  await db.execute({
+    sql: "UPDATE contributions SET retention_eligible_at = ? WHERE id = ?",
+    args: ["2020-01-01T00:00:00.000Z", declined.id],
+  });
+
+  const sweep = spawnSync(
+    process.execPath,
+    ["node_modules/tsx/dist/cli.mjs", "scripts/purge-expired.ts"],
+    { encoding: "utf8", env: { ...process.env, LIBSQL_URL: `file:${testDbPath}` } },
+  );
+  assert.equal(sweep.status, 0, sweep.stderr || sweep.stdout);
+
+  const { rows } = await db.execute({
+    sql: "SELECT title, body, credit, credit_account, source_url, status FROM contributions WHERE id = ?",
+    args: [declined.id],
+  });
+  const purged = rows[0];
+  assert.equal(purged.body, "", "the text is gone");
+  assert.equal(purged.credit, "", "so is the credit line");
+  assert.equal(purged.credit_account, "");
+  assert.equal(purged.source_url, "");
+  assert.notEqual(purged.title, title, "and the contributor-authored title");
+  assert.equal(purged.status, "declined", "the decision itself stays auditable");
+});
+
+test("a moderator cannot move a public-domain work onto someone's account", async () => {
+  // Only the "not both" rule was mirrored from the public form. Clearing the
+  // credit and setting an account satisfied it while doing the exact damage
+  // the rule exists to prevent: the author's name off the work, a living
+  // person's handle on it.
+  const title = "Test PD Attribution Guard";
+  await submit({
+    kind: "poem",
+    title,
+    body: "An old verse nobody alive wrote.",
+    provenance: "public_domain",
+    sourceUrl: "https://example.org/source",
+    credit: "A Long-Dead Poet",
+  });
+  const row = await rowByTitle(title);
+  const session = await adminSession();
+
+  const stolen = await moderate(session, {
+    id: String(row.id),
+    status: "pending",
+    internalNotes: "",
+    credit: "",
+    creditAccount: "@someone_alive",
+  });
+  assert.equal(stolen.status, 400, "the swap is refused");
+
+  const stripped = await moderate(session, {
+    id: String(row.id),
+    status: "pending",
+    internalNotes: "",
+    credit: "",
+  });
+  assert.equal(stripped.status, 400, "and so is simply removing the author");
+
+  const unchanged = await rowByTitle(title);
+  assert.equal(unchanged.credit, "A Long-Dead Poet", "the attribution survived both attempts");
+  assert.equal(unchanged.credit_account, "");
+});
+
+test("the retention sweep does not keep re-purging what it already purged", async () => {
+  // Selecting every expired row fixed poems and essays being skipped, but a
+  // swept row still matches "expired" forever. Without a second condition the
+  // sweep re-blanks and re-logs the same rows on every run from then on, and
+  // its own summary count grows without bound.
+  const title = "Test Sweep Idempotence";
+  await submit({ kind: "essay", title, body: "Something declined and later purged. ".repeat(5) });
+  const row = await rowByTitle(title);
+  const session = await adminSession();
+  await moderate(session, {
+    id: String(row.id),
+    status: "declined",
+    declineReason: "off_topic",
+    internalNotes: "",
+  });
+  await db.execute({
+    sql: "UPDATE contributions SET retention_eligible_at = ? WHERE id = ?",
+    args: ["2020-01-01T00:00:00.000Z", row.id],
+  });
+
+  const run = () =>
+    spawnSync(
+      process.execPath,
+      ["node_modules/tsx/dist/cli.mjs", "scripts/purge-expired.ts"],
+      { encoding: "utf8", env: { ...process.env, LIBSQL_URL: `file:${testDbPath}` } },
+    );
+
+  const first = run();
+  assert.equal(first.status, 0, first.stderr || first.stdout);
+  assert.match(first.stdout, new RegExp(String(row.id)), "the first run purges it");
+
+  const second = run();
+  assert.equal(second.status, 0, second.stderr || second.stdout);
+  assert.doesNotMatch(
+    second.stdout,
+    new RegExp(String(row.id)),
+    "the second run leaves it alone — there is nothing left to remove",
+  );
+
+  const { rows } = await db.execute({
+    sql: "SELECT retention_eligible_at, status FROM contributions WHERE id = ?",
+    args: [row.id],
+  });
+  assert.ok(rows[0].retention_eligible_at, "the date stays so the timeline survives");
+  assert.equal(rows[0].status, "declined");
 });

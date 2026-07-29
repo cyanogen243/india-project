@@ -11,7 +11,7 @@ import {
   hashRecoveryCode,
   processImage,
 } from "@/app/lib/contributions";
-import { putObject } from "@/app/lib/storage";
+import { deleteObject, putObject } from "@/app/lib/storage";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -267,6 +267,19 @@ export async function POST(request: NextRequest) {
           { status: 413 },
         );
       }
+      // Decoding is the expensive part — up to MAX_INPUT_PIXELS of work per
+      // request — and until this guard existed nothing was spent before it.
+      // A refused image consumed no allowance at all, so the same 4 MB file
+      // could be resubmitted without end and each attempt paid for a full
+      // decode and re-encode. This allowance is deliberately looser than the
+      // one below: it exists to bound work, not to ration submissions, and a
+      // visitor fighting a phone camera's output should not exhaust it.
+      if (!(await consumeRateLimit("contribution-decode", identifier, 30, 60 * 60 * 1000))) {
+        return NextResponse.json(
+          { error: say(fields.language, MESSAGES.rateLimited) },
+          { status: 429 },
+        );
+      }
       const input = new Uint8Array(await file.arrayBuffer());
       const processed = await processImage(input);
       // Spent here: after everything that can legitimately fail (format,
@@ -280,8 +293,23 @@ export async function POST(request: NextRequest) {
           { status: 429 },
         );
       }
-      await putObject(processed.printKey, processed.printBytes, processed.mimeType);
-      await putObject(processed.socialKey, processed.socialBytes, "image/jpeg");
+      // Both puts are compensated as one unit. Assigning the keys only after
+      // both succeeded looks safer and is the opposite: if the second put
+      // failed, the first object was already in the bucket and the variables
+      // the cleanup path reads were still null, so nothing removed it and no
+      // row ever pointed at it. Deleting a key that was never written is a
+      // no-op, which makes the blunt "remove both" correct either way.
+      try {
+        await putObject(processed.printKey, processed.printBytes, processed.mimeType);
+        await putObject(processed.socialKey, processed.socialBytes, "image/jpeg");
+      } catch (error) {
+        for (const key of [processed.printKey, processed.socialKey]) {
+          await deleteObject(key).catch((cleanupError) => {
+            console.error("orphaned contribution object", key, cleanupError);
+          });
+        }
+        throw error;
+      }
       storageKey = processed.printKey;
       socialStorageKey = processed.socialKey;
       mimeType = processed.mimeType;
@@ -324,44 +352,68 @@ export async function POST(request: NextRequest) {
     const db = await ensureDatabase();
     const now = new Date().toISOString();
     const id = randomUUID();
-    await db.execute({
-      sql: `INSERT INTO contributions
+    try {
+      await db.execute({
+        sql: `INSERT INTO contributions
         (id, kind, title, subtitle, credit, credit_account, provenance, source_url,
          body, language, storage_key, social_storage_key, mime_type, width, height,
          byte_size, status, internal_notes, content_fingerprint, recovery_code_hash,
          created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', '', ?, ?, ?, ?)`,
-      args: [
-        id,
-        fields.kind,
-        fields.title,
-        fields.subtitle,
-        fields.credit,
-        fields.creditAccount,
-        fields.provenance,
-        fields.provenance === "public_domain" ? fields.sourceUrl : "",
-        isFileKind ? "" : fields.body,
-        fields.language,
-        storageKey,
-        socialStorageKey,
-        mimeType,
-        width,
-        height,
-        byteSize,
-        fingerprint,
-        hashRecoveryCode(code),
-        now,
-        now,
-      ],
-    });
+        args: [
+          id,
+          fields.kind,
+          fields.title,
+          fields.subtitle,
+          fields.credit,
+          fields.creditAccount,
+          fields.provenance,
+          fields.provenance === "public_domain" ? fields.sourceUrl : "",
+          isFileKind ? "" : fields.body,
+          fields.language,
+          storageKey,
+          socialStorageKey,
+          mimeType,
+          width,
+          height,
+          byteSize,
+          fingerprint,
+          hashRecoveryCode(code),
+          now,
+          now,
+        ],
+      });
+    } catch (error) {
+      // The objects are already in the bucket. Without this the row that would
+      // have pointed at them never exists, so nothing — not withdrawal, not
+      // the retention sweep, not a moderator — can ever reach them again: an
+      // unreviewed upload kept forever by accident. Compensate, then let the
+      // handler below turn the failure into a message.
+      for (const key of [storageKey, socialStorageKey]) {
+        if (!key) continue;
+        await deleteObject(key).catch((cleanupError) => {
+          console.error("orphaned contribution object", key, cleanupError);
+        });
+      }
+      throw error;
+    }
 
     // The recovery code is deliberately absent from the audit trail: it is the
     // contributor's only credential and nothing stored should be able to
     // reconstruct it.
-    await writeAuditEvent(null, "submitted", "contribution", id, {
-      kind: fields.kind,
-      language: fields.language,
-    });
+    //
+    // Past this point the submission exists and the contributor's only copy of
+    // their code is in the response we are about to send. A failure to record
+    // the audit line must not turn that into an error page, or the row becomes
+    // one nobody can withdraw.
+    try {
+      await writeAuditEvent(null, "submitted", "contribution", id, {
+        kind: fields.kind,
+        language: fields.language,
+      });
+    } catch (auditError) {
+      console.error("contribution stored but audit line failed", id, auditError);
+    }
 
     return NextResponse.json({ ok: true, recoveryCode: code }, { status: 201 });
   } catch (error) {

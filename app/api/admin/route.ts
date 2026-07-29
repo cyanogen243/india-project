@@ -356,6 +356,25 @@ export async function POST(request: NextRequest) {
           { status: 400 },
         );
       }
+      // The public form holds two further rules for public-domain work, and
+      // only the "not both" one above was mirrored here. Clearing the credit
+      // and setting an account satisfied it while doing precisely the damage
+      // the rules exist to prevent: Tagore's name off the poem and a living
+      // person's handle in its place, on a work they did not write.
+      if (String(previous.provenance ?? "") === "public_domain") {
+        if (!mergedCredit) {
+          return NextResponse.json(
+            { error: "Name the author of the original work." },
+            { status: 400 },
+          );
+        }
+        if (mergedAccount) {
+          return NextResponse.json(
+            { error: "Someone else's work cannot be credited to an account." },
+            { status: 400 },
+          );
+        }
+      }
       // Withdrawal and the retention sweep both delete the stored objects and
       // null the keys. Approving such a row again would put a permanently
       // broken card on the wall and republish work its contributor took down.

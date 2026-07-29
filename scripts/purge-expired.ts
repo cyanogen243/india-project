@@ -26,12 +26,28 @@ export async function purgeExpired({ dryRun = false, now = new Date() } = {}) {
   const db = await ensureDatabase();
   const cutoff = now.toISOString();
 
+  // Every expired row, not only the ones holding files. Filtering on a storage
+  // key meant poems and essays were never selected at all: a poem declined for
+  // naming someone kept its full text, its title and its credit line forever,
+  // while the identical decision about a poster was honoured. Writing is the
+  // kind most likely to carry the identifying detail the reason exists for.
+  //
+  // The second clause is what stops a swept row being swept again on every
+  // subsequent run: the retention date stays on the row so the decision keeps
+  // its timeline, and "already emptied" is read off the row's own contents.
+  // Withdrawn rows are emptied the same way at withdrawal, so they fall out of
+  // this set too, which is correct — there is nothing left to remove.
   const expired = await db.execute({
     sql: `SELECT id, title, status, storage_key, social_storage_key
           FROM contributions
           WHERE retention_eligible_at IS NOT NULL
             AND retention_eligible_at <= ?
-            AND (storage_key IS NOT NULL OR social_storage_key IS NOT NULL)`,
+            AND (storage_key IS NOT NULL
+                 OR social_storage_key IS NOT NULL
+                 OR body <> ''
+                 OR credit <> ''
+                 OR credit_account <> ''
+                 OR source_url <> '')`,
     args: [cutoff],
   });
 
@@ -43,9 +59,15 @@ export async function purgeExpired({ dryRun = false, now = new Date() } = {}) {
       files += 1;
     }
     if (!dryRun) {
+      // The same erasure withdrawal performs, for the same reason: the row is
+      // kept only so the decision stays auditable, and a decision does not
+      // need the words that prompted it.
       await db.execute({
         sql: `UPDATE contributions
-              SET storage_key = NULL, social_storage_key = NULL, updated_at = ?
+              SET storage_key = NULL, social_storage_key = NULL,
+                  body = '', title = '(purged)', subtitle = '',
+                  credit = '', credit_account = '', source_url = '',
+                  updated_at = ?
               WHERE id = ?`,
         args: [cutoff, row.id],
       });
@@ -53,7 +75,7 @@ export async function purgeExpired({ dryRun = false, now = new Date() } = {}) {
     // Ids, never titles: contributor-authored titles include work declined
     // precisely because it identified someone, and stdout ends up in a log
     // aggregator with its own retention and its own access rules.
-    console.log(`${dryRun ? "would purge" : "purged"} files for ${row.status} ${row.id}`);
+    console.log(`${dryRun ? "would purge" : "purged"} ${row.status} ${row.id}`);
   }
 
   // Volunteer submissions carry the same retention date, set when a moderator
