@@ -327,3 +327,46 @@ test("a curated upload that fails to store leaves nothing behind either", async 
   });
   assert.equal(Number(rows[0].n), 0, "and no row was written");
 });
+
+test("declining removes the files from the bucket", async () => {
+  // A declined poster used to keep both objects. Nothing else deletes them, so
+  // they stayed for the life of the database.
+  await resetRateLimits();
+  const sent = await submitPoster("S3 Declined Poster");
+  assert.equal(sent.status, 201, JSON.stringify(sent.body));
+
+  const { rows } = await db.execute({
+    sql: "SELECT id, storage_key, social_storage_key FROM contributions WHERE title = ?",
+    args: ["S3 Declined Poster"],
+  });
+  const row = rows[0];
+  const keys = [String(row.storage_key), String(row.social_storage_key)];
+  for (const key of keys) {
+    assert.ok(s3.keys().includes(key), `${key} is in the bucket before the decline`);
+  }
+
+  const { cookie, csrfToken } = await adminSession();
+  const declined = await fetch(`${baseUrl}/api/admin`, {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie, "x-tip-csrf": csrfToken },
+    body: JSON.stringify({
+      action: "contribution_update",
+      id: String(row.id),
+      status: "declined",
+      declineReason: "off_topic",
+      internalNotes: "out of scope",
+    }),
+  });
+  assert.equal(declined.status, 200);
+
+  for (const key of keys) {
+    assert.ok(!s3.keys().includes(key), `${key} is gone from the bucket after the decline`);
+  }
+  const after = await db.execute({
+    sql: "SELECT storage_key, social_storage_key, decline_reason FROM contributions WHERE id = ?",
+    args: [String(row.id)],
+  });
+  assert.equal(after.rows[0].storage_key, null, "and the row no longer points at it");
+  assert.equal(after.rows[0].social_storage_key, null);
+  assert.equal(after.rows[0].decline_reason, "off_topic", "while the decision survives");
+});

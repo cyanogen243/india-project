@@ -1015,33 +1015,55 @@ test("a curated public-domain work must be as checkable as a contributed one", a
   assert.equal(Number(row.placeholder), 1, "admin-added filler is counted as a placeholder");
 });
 
-test("a retained row keeps its original deletion date when edited", async () => {
-  const title = "Test Retention Frozen";
-  const sent = await submit({ kind: "poem", title, body: "A poem that will be declined." });
+test("declining erases the work, and declining again changes nothing", async () => {
+  const title = "Test Decline Erases";
+  const body = "A poem that named somebody it should not have.";
+  const sent = await submit({ kind: "poem", title, body, credit: "Alias" });
   assert.equal(sent.status, 201);
   const row = await rowByTitle(title);
   const session = await adminSession();
   await moderate(session, {
     id: String(row.id),
     status: "declined",
-    declineReason: "off_topic",
+    declineReason: "identifying_info",
     internalNotes: "first pass",
   });
-  const first = await rowByTitle(title);
-  assert.ok(first.retention_eligible_at, "declining sets a deletion date");
 
-  await moderate(session, {
+  const read = async () => {
+    const { rows } = await db.execute({
+      sql: `SELECT status, title, body, subtitle, credit, credit_account, source_url,
+                   content_fingerprint, decline_reason, internal_notes
+            FROM contributions WHERE id = ?`,
+      args: [String(row.id)],
+    });
+    return rows[0];
+  };
+
+  const declined = await read();
+  assert.equal(declined.body, "", "the text is gone");
+  assert.equal(declined.credit, "", "and the credit");
+  assert.notEqual(declined.title, title, "and the title the contributor chose");
+  assert.equal(declined.content_fingerprint, null, "and the hash of it");
+  // The decision survives so a recovery code can still explain the outcome.
+  assert.equal(declined.status, "declined");
+  assert.equal(declined.decline_reason, "identifying_info");
+  assert.equal(declined.internal_notes, "first pass", "as does the moderator's note");
+
+  // A second pass — tidying notes, or a double click — must not resurrect a
+  // title or body from the request, and must not fail.
+  const again = await moderate(session, {
     id: String(row.id),
     status: "declined",
     declineReason: "off_topic",
-    internalNotes: "second pass, notes tidied",
+    internalNotes: "second pass",
+    title: "Resurrected Title",
+    body: "Resurrected body text.",
   });
-  const second = await rowByTitle(title);
-  assert.equal(
-    String(second.retention_eligible_at),
-    String(first.retention_eligible_at),
-    "editing notes does not push the deletion date out by another 180 days",
-  );
+  assert.equal(again.status, 200);
+  const after = await read();
+  assert.equal(after.body, "", "the body stays gone");
+  assert.equal(after.title, declined.title, "and the title stays as it was");
+  assert.equal(after.internal_notes, "second pass", "only the note changes");
 });
 
 test("schema refusals follow the language of the page too", async () => {
@@ -1454,4 +1476,37 @@ test("an image that fails to decode still costs its sender an allowance", async 
     "SELECT count(*) AS n FROM contributions WHERE title LIKE 'Test Decode Allowance%'",
   );
   assert.equal(Number(stored.rows[0].n), 0, "and none of them were stored");
+});
+
+test("a withdrawn row cannot have its text written back either", async () => {
+  // The same hole as re-declining: a moderator request that keeps the status at
+  // withdrawn passes the republish guard, and the ordinary edit path takes the
+  // title and body from the request.
+  const title = "Test Withdrawn No Rewrite";
+  const sent = await submit({
+    kind: "poem",
+    title,
+    body: "A poem the author took down.",
+    credit: "Alias",
+  });
+  const row = await rowByTitle(title);
+  assert.equal((await lookup(sent.body.recoveryCode, "withdraw")).status, 200);
+
+  const session = await adminSession();
+  const rewrite = await moderate(session, {
+    id: String(row.id),
+    status: "withdrawn",
+    internalNotes: "",
+    title: "Put Back",
+    body: "Put the words back.",
+  });
+  assert.equal(rewrite.status, 200, "the request is accepted");
+
+  const { rows } = await db.execute({
+    sql: "SELECT title, body, status FROM contributions WHERE id = ?",
+    args: [String(row.id)],
+  });
+  assert.equal(rows[0].body, "", "but the body stays gone");
+  assert.equal(rows[0].title, "(withdrawn)", "and the title stays a placeholder");
+  assert.equal(rows[0].status, "withdrawn");
 });

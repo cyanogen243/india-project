@@ -29,8 +29,7 @@ CREATE TABLE IF NOT EXISTS contributions (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   reviewed_by TEXT,
-  reviewed_at TEXT,
-  retention_eligible_at TEXT
+  reviewed_at TEXT
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS contributions_recovery_code_unique

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { consumeRateLimit, ensureDatabase, writeAuditEvent } from "@/app/lib/database";
 import {
-  RETENTION_WINDOW_MS,
+  ERASED_CONTRIBUTION_COLUMNS,
   hashRecoveryCode,
   normalizeRecoveryCode,
 } from "@/app/lib/contributions";
@@ -82,25 +82,16 @@ export async function POST(request: NextRequest) {
       }
       const now = new Date();
       // For a poem or an essay the body IS the work, so nulling the storage
-      // keys removed nothing: the full text stayed in the row and was still
-      // served to every moderator. Someone who takes their writing down —
+      // keys erases nothing on its own. Someone who takes their writing down —
       // plausibly because it puts them at risk — gets it erased here and now,
-      // which is what the UI promises. Nothing defers this: there is no
-      // scheduled cleanup on this branch, so if it does not happen here it
-      // does not happen.
+      // which is what the UI promises.
       await db.execute({
         sql: `UPDATE contributions
               SET status = 'withdrawn', title = '(withdrawn)',
-                  storage_key = NULL, social_storage_key = NULL,
-                  body = '', subtitle = '', credit = '', credit_account = '',
-                  source_url = '', content_fingerprint = NULL,
-                  updated_at = ?, retention_eligible_at = ?
+                  ${ERASED_CONTRIBUTION_COLUMNS},
+                  updated_at = ?
               WHERE id = ?`,
-        args: [
-          now.toISOString(),
-          new Date(now.getTime() + RETENTION_WINDOW_MS).toISOString(),
-          row.id,
-        ],
+        args: [now.toISOString(), row.id],
       });
       await writeAuditEvent(null, "withdrawn", "contribution", String(row.id), {});
       return NextResponse.json({ ok: true, status: "withdrawn" });

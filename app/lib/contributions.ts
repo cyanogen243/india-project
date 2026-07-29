@@ -48,14 +48,23 @@ export function recoveryCodeMatches(candidate: string, storedHash: string) {
 export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
 
 /**
- * How long a declined or withdrawn row keeps its cleanup-eligible date.
+ * Everything a contribution loses when it stops being publishable.
  *
- * Written out at three call sites before this, which is three chances for them
- * to disagree about a policy number. Nothing acts on the date in this branch —
- * the sweep that would is deliberately not part of this work — so it is a
- * record of when the row became eligible, not a promise that anything happened.
+ * Set by both paths that end a submission — a contributor withdrawing their
+ * work, and a moderator declining it — so the two cannot disagree about what
+ * erasing means.
+ *
+ * The row survives: a recovery code still reports the outcome, and the decision
+ * stays auditable. What it keeps is the decision — status, reason, reviewer.
+ * What it loses is the work.
+ *
+ * The title is the caller's, since "(withdrawn)" and "(declined)" are different
+ * facts. So is `internal_notes`: a decline arrives with the moderator's note in
+ * the same request.
  */
-export const RETENTION_WINDOW_MS = 180 * 24 * 60 * 60 * 1000;
+export const ERASED_CONTRIBUTION_COLUMNS = `storage_key = NULL, social_storage_key = NULL,
+  body = '', subtitle = '', credit = '', credit_account = '', source_url = '',
+  content_fingerprint = NULL`;
 
 /**
  * A poem at or under this length is shown in full on its tile; a longer one is

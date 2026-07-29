@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import {
+  ERASED_CONTRIBUTION_COLUMNS,
   ESSAY_MAX_LENGTH,
   POEM_MAX_LENGTH,
-  RETENTION_WINDOW_MS,
 } from "@/app/lib/contributions";
 import {
   assertCsrf,
@@ -253,16 +253,11 @@ export async function POST(request: NextRequest) {
         })
         .parse(body);
       const now = new Date();
-      const retention =
-        input.status === "declined" || input.status === "archived"
-          ? new Date(now.getTime() + RETENTION_WINDOW_MS).toISOString()
-          : null;
       await db.execute({
         sql: `UPDATE volunteer_submissions
-              SET status = ?, internal_notes = ?, updated_at = ?,
-                  retention_eligible_at = ?
+              SET status = ?, internal_notes = ?, updated_at = ?
               WHERE id = ?`,
-        args: [input.status, input.internalNotes, now.toISOString(), retention, input.id],
+        args: [input.status, input.internalNotes, now.toISOString(), input.id],
       });
       await writeAuditEvent(user.id, "updated", "volunteer", input.id, {
         status: input.status,
@@ -331,7 +326,7 @@ export async function POST(request: NextRequest) {
       }
       const existing = await db.execute({
         sql: `SELECT kind, status, title, subtitle, credit, credit_account,
-                     body, storage_key, provenance, retention_eligible_at
+                     body, storage_key, social_storage_key, provenance
               FROM contributions WHERE id = ?`,
         args: [input.id],
       });
@@ -404,37 +399,62 @@ export async function POST(request: NextRequest) {
       }
 
       const now = new Date();
-      // Set when the row first enters a retained state and left alone after
-      // that: recomputing it on every save would push the deletion date out by
-      // another 180 days each time a moderator touched their notes.
-      const entersRetention = input.status === "declined" || input.status === "withdrawn";
-      const retention = entersRetention
-        ? String(previous.retention_eligible_at ?? "") ||
-          new Date(now.getTime() + RETENTION_WINDOW_MS).toISOString()
-        : null;
-      await db.execute({
-        sql: `UPDATE contributions
-              SET status = ?, internal_notes = ?, decline_reason = ?,
-                  title = ?, subtitle = ?, credit = ?, credit_account = ?, body = ?,
-                  reviewed_by = ?, reviewed_at = ?, updated_at = ?,
-                  retention_eligible_at = ?
-              WHERE id = ?`,
-        args: [
-          input.status,
-          input.internalNotes,
-          input.status === "declined" ? input.declineReason : null,
-          input.title ?? String(previous.title),
-          input.subtitle ?? String(previous.subtitle),
-          input.credit ?? String(previous.credit),
-          input.creditAccount ?? String(previous.credit_account),
-          input.body ?? String(previous.body),
-          user.id,
-          now.toISOString(),
-          now.toISOString(),
-          retention,
-          input.id,
-        ],
-      });
+
+      // Declining erases the work the way withdrawal does: a decline that only
+      // changed a status left the poem that named someone, and both of a
+      // poster's files, in place. The row keeps the decision — status, reason,
+      // reviewer — and loses the submission.
+      //
+      // Keyed on the status being written, not on the transition into it. Keying
+      // on the transition meant a second request against an already-terminal row
+      // took the ordinary edit path, where the title and body come from the
+      // request — so a decline could be followed by a decline that put the text
+      // back.
+      const terminal = input.status === "declined" || input.status === "withdrawn";
+      if (terminal) {
+        for (const key of [previous.storage_key, previous.social_storage_key]) {
+          if (typeof key === "string" && key) await deleteObject(key);
+        }
+        await db.execute({
+          sql: `UPDATE contributions
+                SET status = ?, internal_notes = ?, decline_reason = ?, title = ?,
+                    ${ERASED_CONTRIBUTION_COLUMNS},
+                    reviewed_by = ?, reviewed_at = ?, updated_at = ?
+                WHERE id = ?`,
+          args: [
+            input.status,
+            input.internalNotes,
+            input.status === "declined" ? input.declineReason : null,
+            input.status === "declined" ? "(declined)" : "(withdrawn)",
+            user.id,
+            now.toISOString(),
+            now.toISOString(),
+            input.id,
+          ],
+        });
+      } else {
+        await db.execute({
+          sql: `UPDATE contributions
+                SET status = ?, internal_notes = ?, decline_reason = ?,
+                    title = ?, subtitle = ?, credit = ?, credit_account = ?, body = ?,
+                    reviewed_by = ?, reviewed_at = ?, updated_at = ?
+                WHERE id = ?`,
+          args: [
+            input.status,
+            input.internalNotes,
+            input.status === "declined" ? input.declineReason : null,
+            input.title ?? String(previous.title),
+            input.subtitle ?? String(previous.subtitle),
+            input.credit ?? String(previous.credit),
+            input.creditAccount ?? String(previous.credit_account),
+            input.body ?? String(previous.body),
+            user.id,
+            now.toISOString(),
+            now.toISOString(),
+            input.id,
+          ],
+        });
+      }
       await writeAuditEvent(user.id, "reviewed", "contribution", input.id, {
         status: input.status,
       });

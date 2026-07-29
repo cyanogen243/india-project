@@ -196,7 +196,6 @@ export const contributions = sqliteTable(
     updatedAt: text("updated_at").notNull(),
     reviewedBy: text("reviewed_by"),
     reviewedAt: text("reviewed_at"),
-    retentionEligibleAt: text("retention_eligible_at"),
   },
   (table) => [
     uniqueIndex("contributions_recovery_code_unique").on(table.recoveryCodeHash),

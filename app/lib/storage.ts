@@ -177,16 +177,15 @@ export async function deleteObject(key: string) {
  * Stores both variants of a processed image, recording each key in `written`
  * *before* its write is attempted.
  *
- * The ordering is the whole point, and it is easy to get backwards. Recording a
- * key only once its put has returned looks safer and is the opposite: a failure
- * on the second write left the first object in the bucket while the list the
- * cleanup path reads was still empty. Naming a key that was never written costs
- * a no-op delete; missing one costs an unreviewed upload kept forever, because
- * every path that deletes an object starts from a database row.
+ * The ordering is the point, and it is easy to get backwards. Recording a key
+ * only once its put has returned looks safer and is the opposite: a failure on
+ * the second write leaves the first object in the bucket while the list the
+ * cleanup path reads is still empty. Naming a key that was never written costs
+ * a no-op delete; missing one leaves a file no row points at, and every path
+ * that deletes an object starts from a row.
  *
  * Three callers store images — the public form, admin curation, and the seed
- * script — and each needs the same guarantee, so the ordering rule lives here
- * rather than being restated correctly three times.
+ * script — so the rule lives here rather than being restated three times.
  */
 export async function putProcessedImage(processed: ProcessedImage, written: string[]) {
   written.push(processed.printKey);

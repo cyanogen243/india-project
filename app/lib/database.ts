@@ -35,7 +35,7 @@ const CONTRIBUTIONS_TABLE = `CREATE TABLE IF NOT EXISTS contributions (
        'low_quality', 'duplicate', 'other')),
     recovery_code_hash TEXT NOT NULL,
     created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
-    reviewed_by TEXT, reviewed_at TEXT, retention_eligible_at TEXT
+    reviewed_by TEXT, reviewed_at TEXT
   )`;
 
 export const migrationStatements = [

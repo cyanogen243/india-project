@@ -109,10 +109,7 @@ Volunteer intake collects only a name or alias, email, contact platform and
 handle, skills, languages, availability, a short note, and consent. Contact
 platforms are limited to WhatsApp, Telegram, and Discord; the form asks for a
 handle rather than a phone number. It deliberately omits IDs, files, and precise
-locations. Declined and archived records are stamped with a cleanup-eligible
-date 180 days out, and can be explicitly deleted by an admin at any time.
-Nothing acts on that date yet: the sweep that would honour it is deliberately
-not part of this work, so the date is a record, not a promise.
+locations. An admin can delete a record outright at any time.
 
 Editorial content is saved as drafts and published per collection. Existing
 source tiers, bilingual parity, timestamps, reviewer requirements, unsafe HTML,
