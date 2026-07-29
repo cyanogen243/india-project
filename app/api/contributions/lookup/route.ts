@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { consumeRateLimit, ensureDatabase, writeAuditEvent } from "@/app/lib/database";
-import {
-  ERASED_CONTRIBUTION_COLUMNS,
-  hashRecoveryCode,
-  normalizeRecoveryCode,
-} from "@/app/lib/contributions";
+import { hashRecoveryCode, normalizeRecoveryCode } from "@/app/lib/contributions";
 import { deleteObject } from "@/app/lib/storage";
 
 export const dynamic = "force-dynamic";
@@ -82,15 +78,18 @@ export async function POST(request: NextRequest) {
       }
       const now = new Date();
       // For a poem or an essay the body IS the work, so nulling the storage
-      // keys removed nothing: the full text stayed in the row, was still
-      // served to every moderator, and outlived the retention date because the
-      // sweep only looks at rows that still have a storage key. Someone who
-      // takes their writing down — plausibly because it puts them at risk —
-      // gets it erased here, which is what the UI already promises.
+      // keys removed nothing: the full text stayed in the row and was still
+      // served to every moderator. Someone who takes their writing down —
+      // plausibly because it puts them at risk — gets it erased here and now,
+      // which is what the UI promises. Nothing defers this: there is no
+      // scheduled cleanup on this branch, so if it does not happen here it
+      // does not happen.
       await db.execute({
         sql: `UPDATE contributions
               SET status = 'withdrawn', title = '(withdrawn)',
-                  ${ERASED_CONTRIBUTION_COLUMNS},
+                  storage_key = NULL, social_storage_key = NULL,
+                  body = '', subtitle = '', credit = '', credit_account = '',
+                  source_url = '', content_fingerprint = NULL,
                   updated_at = ?, retention_eligible_at = ?
               WHERE id = ?`,
         args: [

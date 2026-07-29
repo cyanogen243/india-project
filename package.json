@@ -26,8 +26,7 @@
     "test:unit": "tsx --test tests/volunteer-filter.test.ts",
     "test:sites": "npm run build:sites && node --test tests/rendered-html.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern .output --ignore-pattern .astro --ignore-pattern .netlify --ignore-pattern dist-demo --ignore-pattern test-results",
-    "seed:art": "tsx scripts/seed-contributions.ts",
-    "purge:expired": "tsx scripts/purge-expired.ts"
+    "seed:art": "tsx scripts/seed-contributions.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1096.0",

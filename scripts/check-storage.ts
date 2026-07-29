@@ -93,8 +93,9 @@ async function main() {
   const afterDelete = await getObject(key);
   if (afterDelete) {
     throw new Error(
-      "The object survived deletion. Withdrawal and the retention sweep both " +
-        "depend on this working, so the bucket is not safe to use yet.",
+      "The object survived deletion. Contributor withdrawal and moderator " +
+        "deletion both depend on this working, so the bucket is not safe to " +
+        "use yet.",
     );
   }
   console.log("   gone");

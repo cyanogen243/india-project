@@ -38,7 +38,6 @@ type Volunteer = {
   status: string;
   internalNotes: string;
   createdAt: string;
-  retentionEligibleAt: string | null;
 };
 
 type Contribution = {
@@ -861,7 +860,6 @@ function VolunteerCard({
       <p>{volunteer.note}</p>
       <label>Status<select value={status} onChange={(event) => setStatus(event.target.value)}>{statuses.map((item) => <option key={item}>{item}</option>)}</select></label>
       <label>Internal notes<textarea rows={4} value={notes} onChange={(event) => setNotes(event.target.value)} /></label>
-      {volunteer.retentionEligibleAt && <small>Cleanup eligible after {new Date(volunteer.retentionEligibleAt).toLocaleDateString("en-IN")}</small>}
       <div className="admin-actions"><button className="button button-primary" onClick={() => void onSave(status, notes)}>Save</button><button className="button button-danger" onClick={() => void onDelete()}>Delete</button></div>
     </article>
   );

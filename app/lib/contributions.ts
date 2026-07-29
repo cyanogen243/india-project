@@ -80,27 +80,6 @@ export function contentFingerprint(bytes: Uint8Array) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-/**
- * Everything a contribution loses when it is erased, as one definition.
- *
- * Two paths erase a contribution — a contributor withdrawing it, and the
- * retention sweep acting on a date set 180 days earlier — and both mean the
- * same thing by it. Written out twice they had already drifted: withdrawal
- * cleared the content fingerprint and the sweep did not, leaving a hash of
- * material the project had promised to delete. The row itself survives either
- * way, because the decision has to stay auditable; the words that prompted it
- * do not.
- *
- * The title is set by the caller, since "(withdrawn)" and "(purged)" are
- * different facts about how the row got here. `internal_notes` is deliberately
- * absent: the sweep clears the moderator's note as well, and withdrawal keeps
- * it. That asymmetry is the one intended difference between the two, and the
- * reasoning lives at the sweep's call site.
- */
-export const ERASED_CONTRIBUTION_COLUMNS = `storage_key = NULL, social_storage_key = NULL,
-  body = '', subtitle = '', credit = '', credit_account = '', source_url = '',
-  content_fingerprint = NULL`;
-
 // Longest edge of the stored print variant. A3 at 300dpi is 4961px, A4 is
 // 3508px, so this keeps a poster printable at A3 — the largest size anyone
 // runs off at a copy shop — without storing more than a printer can use.

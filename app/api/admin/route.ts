@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
       db.execute(`SELECT id, name, email, contact_platform, contact_handle,
                          city, team, skills_json, languages_json, availability,
                          note, language, status, internal_notes, consented_at,
-                         created_at, updated_at, retention_eligible_at
+                         created_at, updated_at
                   FROM volunteer_submissions ORDER BY created_at DESC`),
       db.execute(`SELECT id, kind, title, subtitle, credit, credit_account, body,
                          language, provenance, source_url, placeholder,
@@ -100,9 +100,6 @@ export async function GET(request: NextRequest) {
         consentedAt: String(row.consented_at),
         createdAt: String(row.created_at),
         updatedAt: String(row.updated_at),
-        retentionEligibleAt: row.retention_eligible_at
-          ? String(row.retention_eligible_at)
-          : null,
       })),
       contributions: contributions.rows.map((row) => ({
         id: String(row.id),
@@ -375,8 +372,9 @@ export async function POST(request: NextRequest) {
           );
         }
       }
-      // Withdrawal and the retention sweep both delete the stored objects and
-      // null the keys. Approving such a row again would put a permanently
+      // Withdrawal deletes the stored objects and nulls the keys, and a
+      // moderator can delete them outright. Approving such a row would put a
+      // permanently
       // broken card on the wall and republish work its contributor took down.
       const isFileKind = previous.kind === "poster" || previous.kind === "image";
       // Withdrawal is terminal. Blocking only `approved` was not enough: a row

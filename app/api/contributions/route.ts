@@ -162,8 +162,9 @@ function withoutControlCharacters(value: unknown) {
 export async function POST(request: NextRequest) {
   // Keys of objects this request has put, or is about to. One list, cleaned up
   // in one place, because every failure after the first byte reaches storage
-  // has the same consequence: files no row points at, which no withdrawal and
-  // no retention sweep can ever reach.
+  // has the same consequence: files no row points at. Nothing can reach those.
+  // Withdrawal and moderator deletion both work from a row, so an object with
+  // no row is kept until someone finds it by hand in the bucket.
   const written: string[] = [];
   try {
     // Checked before the body is read, so a caller already over the limit
@@ -290,8 +291,8 @@ export async function POST(request: NextRequest) {
       // Spent here: after everything that can legitimately fail (format,
       // size, decode), and before the first byte reaches the bucket. Earlier
       // and a refused file cost the visitor an hour having stored nothing;
-      // later and a request losing the race left orphaned objects no sweep
-      // could ever reach.
+      // later and a request losing the race left orphaned objects that nothing
+      // working from a row could ever reach.
       if (!(await consumeRateLimit("contribution-submit", identifier, 5, 60 * 60 * 1000))) {
         return NextResponse.json(
           { error: say(fields.language, MESSAGES.rateLimited) },
@@ -337,8 +338,8 @@ export async function POST(request: NextRequest) {
 
     // Spent before anything is written to the bucket. Uploading first and
     // checking after meant a request that lost the race returned 429 with its
-    // two objects already stored and no row to reference them — unreachable by
-    // the retention sweep, which walks rows, and so permanent.
+    // two objects already stored and no row to reference them. Every path that
+    // deletes an object starts from a row, so that is permanent.
     if (!isFileKind && !(await consumeRateLimit("contribution-submit", identifier, 5, 60 * 60 * 1000))) {
       return NextResponse.json(
         { error: say(fields.language, MESSAGES.rateLimited) },
