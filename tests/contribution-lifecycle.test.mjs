@@ -1288,6 +1288,7 @@ test("withdrawing writing erases the writing", async () => {
 test("the public payload does not carry a submission timestamp", async () => {
   const title = "Test Timestamp Precision";
   const sent = await submit({ kind: "poem", title, body: "A poem whose upload time is nobody's business." });
+  assert.equal(sent.status, 201);
   const row = await rowByTitle(title);
   const session = await adminSession();
   await moderate(session, { id: String(row.id), status: "approved", internalNotes: "" });

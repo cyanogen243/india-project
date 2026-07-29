@@ -27,9 +27,7 @@ const ESSAY_TEASER_LIMIT = 240;
 // which renders as a broken glyph. Segmenting first cuts on real characters.
 function countGraphemes(value: string) {
   const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
-  let total = 0;
-  for (const _ of segmenter.segment(value)) total += 1;
-  return total;
+  return [...segmenter.segment(value)].length;
 }
 
 function cutGraphemes(value: string, limit: number) {
