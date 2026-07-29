@@ -1389,3 +1389,55 @@ test("a submission survives an audit line that will not write", async () => {
   const status = await lookup(sent.body.recoveryCode, "status");
   assert.equal(status.status, 200, "and the code they were given still resolves");
 });
+
+test("an image that fails to decode still costs its sender an allowance", async () => {
+  // Decoding is the expensive part of a submission — up to MAX_INPUT_PIXELS of
+  // work. A file that fails inside processing never reaches the submit
+  // allowance, so before this guard the same upload could be resent without
+  // end and every attempt paid for a full decode. The allowance below is
+  // deliberately looser than the submit one: it exists to bound work, not to
+  // ration submissions.
+  const real = await readFile("content/seed-art/poster-stripes.png");
+  // Keeps the PNG signature and header, so it passes the magic-byte gate and
+  // the decoder has to start work before discovering it is unusable.
+  const corrupt = Buffer.from(real);
+  corrupt.fill(0x7f, Math.floor(corrupt.length * 0.4));
+
+  const send = (n) =>
+    submit(
+      { kind: "image", title: `Test Decode Allowance ${n}` },
+      { bytes: corrupt, type: "image/png", name: "corrupt.png" },
+    );
+
+  const first = await send(0);
+  assert.equal(first.status, 400, "an unusable image is refused");
+
+  // One rejected attempt must already have cost something, which is the whole
+  // difference from before: rejected uploads were free.
+  const consumed = await db.execute(
+    "SELECT count FROM rate_limits WHERE action = 'contribution-decode'",
+  );
+  assert.equal(consumed.rows.length, 1, "a rejected upload consumes decode allowance");
+  assert.equal(Number(consumed.rows[0].count), 1);
+
+  // And the allowance has to actually run out, or it bounds nothing.
+  let refusedAt = null;
+  for (let n = 1; n <= 40 && refusedAt === null; n += 1) {
+    if ((await send(n)).status === 429) refusedAt = n;
+  }
+  assert.ok(refusedAt !== null, "the decode allowance never ran out");
+
+  // Refusal must come before the decoder, so the count stops climbing.
+  const capped = await db.execute(
+    "SELECT count FROM rate_limits WHERE action = 'contribution-decode'",
+  );
+  assert.ok(
+    Number(capped.rows[0].count) <= refusedAt + 1,
+    "refusals are not themselves paying for a decode",
+  );
+
+  const stored = await db.execute(
+    "SELECT count(*) AS n FROM contributions WHERE title LIKE 'Test Decode Allowance%'",
+  );
+  assert.equal(Number(stored.rows[0].n), 0, "and none of them were stored");
+});
