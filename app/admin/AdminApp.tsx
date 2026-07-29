@@ -979,7 +979,21 @@ function ContributionCard({
 }) {
   const [status, setStatus] = useState(contribution.status);
   const [notes, setNotes] = useState(contribution.internalNotes);
-  const [reason, setReason] = useState(contribution.declineReason ?? "off_topic");
+  // Only reasons that can be true of this record are offered, so the stored
+  // one is used only when it survives that filter. Seeding from a value the
+  // list no longer contains made the select display one reason while Save
+  // submitted another.
+  const offeredReasons = Object.keys(declineReasons).filter((value) => {
+    if (value === "not_own_work") return contribution.provenance !== "public_domain";
+    if (value === "not_public_domain") return contribution.provenance === "public_domain";
+    if (value === "low_quality") return !(contribution.kind === "poem" || contribution.kind === "essay");
+    return true;
+  });
+  const [reason, setReason] = useState(
+    contribution.declineReason && offeredReasons.includes(contribution.declineReason)
+      ? contribution.declineReason
+      : offeredReasons[0] ?? "other",
+  );
   const [title, setTitle] = useState(contribution.title);
   const [subtitle, setSubtitle] = useState(contribution.subtitle);
   const [credit, setCredit] = useState(contribution.credit);
@@ -1059,16 +1073,10 @@ function ContributionCard({
         <label>
           Reason shown to the contributor
           <select value={reason} onChange={(event) => setReason(event.target.value)}>
-            {Object.entries(declineReasons)
-              // A contributor reads this verbatim, so only offer reasons that
-              // can be true of what they actually sent: no "resolution too
-              // low" on a poem, and the provenance pair follows the claim.
-              .filter(([value]) => {
-                if (value === "not_own_work") return contribution.provenance !== "public_domain";
-                if (value === "not_public_domain") return contribution.provenance === "public_domain";
-                if (value === "low_quality") return !isTextKind;
-                return true;
-              })
+            {/* A contributor reads this verbatim, so only reasons that can be
+                true of what they actually sent are offered. */}
+            {offeredReasons
+              .map((value) => [value, declineReasons[value]] as const)
               .map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
             ))}

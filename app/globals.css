@@ -1965,9 +1965,6 @@ footer p {
   gap: 1rem;
 }
 
-.volunteer-filter-summary {
-  margin-bottom: 1rem;
-}
 
 .volunteer-admin-empty {
   grid-column: 1 / -1;

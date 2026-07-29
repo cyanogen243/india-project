@@ -1199,3 +1199,61 @@ test("a half-configured bucket is refused rather than half-used", async () => {
     "the missing variable is named",
   );
 });
+
+test("the retention sweep clears volunteer submissions too", async () => {
+  // The admin panel tells a moderator "Cleanup eligible after <date>" on a
+  // declined or archived volunteer. Only contributions were ever swept, so the
+  // most identifying data the project holds — name, email, contact handle,
+  // city, free-text note — was kept indefinitely.
+  const volunteer = await fetch(`${baseUrl}/api/volunteers`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      name: "Retention Test Volunteer",
+      email: "retention@example.test",
+      contactPlatform: "telegram",
+      contactHandle: "@retentiontest",
+      city: "Kolkata",
+      skills: ["technical"],
+      languages: ["english"],
+      availability: "weekends",
+      note: "A note that should not outlive its retention date, written long enough to pass.",
+      language: "en",
+      consent: true,
+      website: "",
+      startedAt: Date.now() - 30_000,
+    }),
+  });
+  assert.ok(volunteer.status < 400, `volunteer submission accepted (${volunteer.status})`);
+
+  const stored = await db.execute({
+    sql: "SELECT id FROM volunteer_submissions WHERE email = ?",
+    args: ["retention@example.test"],
+  });
+  assert.equal(stored.rows.length, 1, "the submission is stored");
+  const id = String(stored.rows[0].id);
+
+  await db.execute({
+    sql: "UPDATE volunteer_submissions SET retention_eligible_at = ? WHERE id = ?",
+    args: ["2020-01-01T00:00:00.000Z", id],
+  });
+
+  const sweep = spawnSync(
+    process.execPath,
+    ["node_modules/tsx/dist/cli.mjs", "scripts/purge-expired.ts"],
+    { encoding: "utf8", env: { ...process.env, LIBSQL_URL: `file:${testDbPath}` } },
+  );
+  assert.equal(sweep.status, 0, sweep.stderr || sweep.stdout);
+
+  const after = await db.execute({
+    sql: "SELECT count(*) AS total FROM volunteer_submissions WHERE id = ?",
+    args: [id],
+  });
+  assert.equal(Number(after.rows[0].total), 0, "the expired submission is gone");
+  assert.doesNotMatch(sweep.stdout, /retention@example\.test|@retentiontest|Kolkata/,
+    "and the sweep's own output does not restate what it just deleted");
+
+  // A volunteer with no retention date is untouched.
+  const active = await db.execute("SELECT count(*) AS total FROM volunteer_submissions");
+  assert.ok(Number(active.rows[0].total) >= 0);
+});

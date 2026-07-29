@@ -2,7 +2,10 @@ import { ensureDatabase } from "../app/lib/database";
 import { deleteObject } from "../app/lib/storage";
 
 /**
- * Retention sweep. Declined and withdrawn contributions carry a
+ * Retention sweep for everything the project promises to stop holding:
+ * contribution files, volunteer submissions, and expired rate-limit rows.
+ *
+ * Declined and withdrawn contributions carry a
  * `retention_eligible_at` date (180 days out, set when the status changes).
  * Nothing acted on those dates until this script, so rejected uploads stayed
  * in object storage forever — material an anonymous contributor asked us to
@@ -50,6 +53,29 @@ export async function purgeExpired({ dryRun = false, now = new Date() } = {}) {
     console.log(`${dryRun ? "would purge" : "purged"} files for ${row.status}: ${row.title}`);
   }
 
+  // Volunteer submissions carry the same retention date, set when a moderator
+  // archives or declines one, and the admin panel tells them "Cleanup eligible
+  // after <date>". Nothing kept that promise: this sweep only ever looked at
+  // contributions, so names, emails, contact handles, cities and free-text
+  // notes were retained indefinitely. That is the most identifying data the
+  // project holds — more so since the city field was added.
+  const expiredVolunteers = await db.execute({
+    sql: `SELECT id, name FROM volunteer_submissions
+          WHERE retention_eligible_at IS NOT NULL AND retention_eligible_at <= ?`,
+    args: [cutoff],
+  });
+  for (const row of expiredVolunteers.rows) {
+    if (!dryRun) {
+      await db.execute({
+        sql: "DELETE FROM volunteer_submissions WHERE id = ?",
+        args: [row.id],
+      });
+    }
+    // The name is logged, not the contact details, so an operator can see the
+    // sweep worked without the log becoming the thing it just deleted.
+    console.log(`${dryRun ? "would remove" : "removed"} volunteer submission: ${row.name}`);
+  }
+
   // Rate-limit rows are keyed on an HMAC of the caller's IP and stamped with
   // the moment they acted. Left to accumulate they outlive every retention
   // promise the site makes, and their timestamps line up with contribution
@@ -70,7 +96,12 @@ export async function purgeExpired({ dryRun = false, now = new Date() } = {}) {
     console.log(`${dryRun ? "would clear" : "cleared"} ${limits} expired rate-limit row(s)`);
   }
 
-  return { contributions: expired.rows.length, files, rateLimits: limits };
+  return {
+    contributions: expired.rows.length,
+    files,
+    volunteers: expiredVolunteers.rows.length,
+    rateLimits: limits,
+  };
 }
 
 const invokedDirectly = process.argv[1]?.endsWith("purge-expired.ts");
