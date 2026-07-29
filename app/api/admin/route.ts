@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { ESSAY_MAX_LENGTH, POEM_MAX_LENGTH } from "@/app/lib/contributions";
+import {
+  ESSAY_MAX_LENGTH,
+  POEM_MAX_LENGTH,
+  RETENTION_WINDOW_MS,
+} from "@/app/lib/contributions";
 import {
   assertCsrf,
   clearSessionCookie,
@@ -251,7 +255,7 @@ export async function POST(request: NextRequest) {
       const now = new Date();
       const retention =
         input.status === "declined" || input.status === "archived"
-          ? new Date(now.getTime() + 180 * 24 * 60 * 60 * 1000).toISOString()
+          ? new Date(now.getTime() + RETENTION_WINDOW_MS).toISOString()
           : null;
       await db.execute({
         sql: `UPDATE volunteer_submissions
@@ -406,7 +410,7 @@ export async function POST(request: NextRequest) {
       const entersRetention = input.status === "declined" || input.status === "withdrawn";
       const retention = entersRetention
         ? String(previous.retention_eligible_at ?? "") ||
-          new Date(now.getTime() + 180 * 24 * 60 * 60 * 1000).toISOString()
+          new Date(now.getTime() + RETENTION_WINDOW_MS).toISOString()
         : null;
       await db.execute({
         sql: `UPDATE contributions

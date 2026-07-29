@@ -1,5 +1,6 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import type { ProcessedImage } from "@/app/lib/contributions";
 
 /**
  * Object storage for contribution files.
@@ -187,16 +188,7 @@ export async function deleteObject(key: string) {
  * script — and each needs the same guarantee, so the ordering rule lives here
  * rather than being restated correctly three times.
  */
-export async function putProcessedImage(
-  processed: {
-    printKey: string;
-    printBytes: Uint8Array;
-    mimeType: string;
-    socialKey: string;
-    socialBytes: Uint8Array;
-  },
-  written: string[],
-) {
+export async function putProcessedImage(processed: ProcessedImage, written: string[]) {
   written.push(processed.printKey);
   await putObject(processed.printKey, processed.printBytes, processed.mimeType);
   written.push(processed.socialKey);

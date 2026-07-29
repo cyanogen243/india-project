@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { consumeRateLimit, ensureDatabase, writeAuditEvent } from "@/app/lib/database";
-import { hashRecoveryCode, normalizeRecoveryCode } from "@/app/lib/contributions";
+import {
+  RETENTION_WINDOW_MS,
+  hashRecoveryCode,
+  normalizeRecoveryCode,
+} from "@/app/lib/contributions";
 import { deleteObject } from "@/app/lib/storage";
 
 export const dynamic = "force-dynamic";
@@ -94,7 +98,7 @@ export async function POST(request: NextRequest) {
               WHERE id = ?`,
         args: [
           now.toISOString(),
-          new Date(now.getTime() + 180 * 24 * 60 * 60 * 1000).toISOString(),
+          new Date(now.getTime() + RETENTION_WINDOW_MS).toISOString(),
           row.id,
         ],
       });
