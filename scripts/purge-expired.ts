@@ -39,6 +39,13 @@ export async function purgeExpired({ dryRun = false, now = new Date() } = {}) {
   // somewhere else is a published work vanishing 180 days later with no
   // explanation. Cheap to state here; expensive to discover.
   //
+  // The note has to be one of the "still holding something" tests, not just a
+  // thing the update clears. Withdrawal empties the body, the credit and the
+  // keys but keeps the note, so without this a withdrawn row matched none of
+  // the other clauses and the sweep never looked at it again — the one kind of
+  // row whose note is guaranteed to survive withdrawal was the one kind the
+  // sweep could not reach.
+  //
   // The last clause is what stops a swept row being swept again on every
   // subsequent run: the retention date stays on the row so the decision keeps
   // its timeline, and "already emptied" is read off the row's own contents.
@@ -55,7 +62,8 @@ export async function purgeExpired({ dryRun = false, now = new Date() } = {}) {
                  OR body <> ''
                  OR credit <> ''
                  OR credit_account <> ''
-                 OR source_url <> '')`,
+                 OR source_url <> ''
+                 OR internal_notes <> '')`,
     args: [cutoff],
   });
 
@@ -70,9 +78,20 @@ export async function purgeExpired({ dryRun = false, now = new Date() } = {}) {
       // The same erasure withdrawal performs, for the same reason: the row is
       // kept only so the decision stays auditable, and a decision does not
       // need the words that prompted it.
+      //
+      // Plus the moderator's note, which withdrawal deliberately keeps and
+      // this deliberately does not. A note explaining a decline for
+      // identifying information tends to name the thing that was identifying
+      // — "names the SHO at the X station" — so erasing the poem and keeping
+      // the note leaves a summary of exactly the material this sweep exists to
+      // stop holding. Withdrawal is a contributor acting on their own work
+      // while the decision may still be operationally live; this date is the
+      // moment the project said it stops holding any of it.
+      // `decline_reason` is a fixed enum rather than free text, so it stays and
+      // the decision is still readable afterwards.
       await db.execute({
         sql: `UPDATE contributions
-              SET title = '(purged)',
+              SET title = '(purged)', internal_notes = '',
                   ${ERASED_CONTRIBUTION_COLUMNS},
                   updated_at = ?
               WHERE id = ?`,

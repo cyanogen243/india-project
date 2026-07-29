@@ -1589,16 +1589,27 @@ test("a submission survives an audit line that will not write", async () => {
   assert.equal(status.status, 200, "and the code they were given still resolves");
 });
 
-test("withdrawal and the sweep erase the same columns", async () => {
+test("withdrawal and the sweep erase the same columns, and differ only on the note", async () => {
   // Written out separately these two had already drifted: withdrawal cleared
   // the content fingerprint and the sweep left it, keeping a hash of material
   // the project had just promised to delete. They share one definition now,
   // and this fails if either grows a column the other does not.
+  //
+  // The moderator's note is the one intended difference, asserted at the end.
   const withdrawTitle = "Test Erasure Parity Withdrawn";
   const sweepTitle = "Test Erasure Parity Swept";
   const body = "Words that should not outlive the decision about them.";
+  const note = "declined: names the officer at the station";
 
   const first = await submit({ kind: "poem", title: withdrawTitle, body, credit: "Alias" });
+  const withdrawnRow = await rowByTitle(withdrawTitle);
+  const noteSession = await adminSession();
+  // A live moderation note, so withdrawal has something to preserve.
+  await moderate(noteSession, {
+    id: String(withdrawnRow.id),
+    status: "pending",
+    internalNotes: note,
+  });
   await lookup(first.body.recoveryCode, "withdraw");
 
   await submit({ kind: "poem", title: sweepTitle, body, credit: "Alias" });
@@ -1608,7 +1619,7 @@ test("withdrawal and the sweep erase the same columns", async () => {
     id: String(swept.id),
     status: "declined",
     declineReason: "identifying_info",
-    internalNotes: "",
+    internalNotes: note,
   });
   await db.execute({
     sql: "UPDATE contributions SET retention_eligible_at = ? WHERE id = ?",
@@ -1631,16 +1642,20 @@ test("withdrawal and the sweep erase the same columns", async () => {
     "source_url",
     "content_fingerprint",
   ];
-  const read = async (title) => {
+  // By id, not by placeholder title: other tests in this run also produce
+  // "(withdrawn)" and "(purged)" rows, so matching on the title asserted
+  // against whichever row happened to come first.
+  const read = async (id) => {
     const { rows } = await db.execute({
-      sql: `SELECT ${columns.join(", ")} FROM contributions WHERE title = ?`,
-      args: [title],
+      sql: `SELECT ${columns.join(", ")}, internal_notes, decline_reason
+            FROM contributions WHERE id = ?`,
+      args: [id],
     });
     return rows[0];
   };
-  const withdrawn = await read("(withdrawn)");
-  const purged = await read("(purged)");
-  assert.ok(withdrawn, "the withdrawn row is findable by its placeholder title");
+  const withdrawn = await read(withdrawnRow.id);
+  const purged = await read(swept.id);
+  assert.ok(withdrawn, "the withdrawn row is still there");
   assert.ok(purged, "so is the purged one");
 
   for (const column of columns) {
@@ -1651,6 +1666,22 @@ test("withdrawal and the sweep erase the same columns", async () => {
       `the sweep leaves ${column} empty too — it did not, for ${column}`,
     );
   }
+
+  // The one intended difference. A note explaining a decline for identifying
+  // information tends to name the identifying thing, so keeping it past the
+  // retention date would preserve a summary of what was just deleted.
+  // Withdrawal keeps it: the decision may still be operationally live.
+  assert.equal(
+    withdrawn.internal_notes,
+    note,
+    "withdrawal keeps the moderator's note",
+  );
+  assert.equal(purged.internal_notes, "", "the sweep clears it");
+  assert.equal(
+    purged.decline_reason,
+    "identifying_info",
+    "but the reason survives, so the decision is still readable",
+  );
 });
 
 test("the sweep never touches a live contribution, whatever date it carries", async () => {
@@ -1690,4 +1721,56 @@ test("the sweep never touches a live contribution, whatever date it carries", as
   assert.ok(survived, "the approved work is still there");
   assert.ok(survived.storage_key, "with its file");
   assert.equal(survived.status, "approved");
+});
+
+test("a withdrawn row's moderator note is cleared once its retention date passes", async () => {
+  // Withdrawal empties the body, credit and keys but keeps the note, so a
+  // withdrawn row matches none of the sweep's other "still holding something"
+  // clauses. Without the note being one of them, the one kind of row certain to
+  // carry a note past withdrawal was the one kind the sweep never revisited.
+  const title = "Test Withdrawn Note Retention";
+  const note = "declined: names the officer at the station";
+  const sent = await submit({
+    kind: "poem",
+    title,
+    body: "A verse that named somebody it should not have.",
+    credit: "Alias",
+  });
+  const row = await rowByTitle(title);
+  const session = await adminSession();
+  await moderate(session, { id: String(row.id), status: "pending", internalNotes: note });
+  await lookup(sent.body.recoveryCode, "withdraw");
+
+  const readNote = async () => {
+    const { rows } = await db.execute({
+      sql: "SELECT internal_notes, status, retention_eligible_at FROM contributions WHERE id = ?",
+      args: [row.id],
+    });
+    return rows[0];
+  };
+  const afterWithdrawal = await readNote();
+  assert.equal(afterWithdrawal.status, "withdrawn");
+  assert.equal(afterWithdrawal.internal_notes, note, "withdrawal keeps it, by design");
+  assert.ok(afterWithdrawal.retention_eligible_at, "and stamps a retention date");
+
+  await db.execute({
+    sql: "UPDATE contributions SET retention_eligible_at = ? WHERE id = ?",
+    args: ["2020-01-01T00:00:00.000Z", row.id],
+  });
+  const sweep = spawnSync(
+    process.execPath,
+    ["node_modules/tsx/dist/cli.mjs", "scripts/purge-expired.ts"],
+    { encoding: "utf8", env: { ...process.env, LIBSQL_URL: `file:${testDbPath}` } },
+  );
+  assert.equal(sweep.status, 0, sweep.stderr || sweep.stdout);
+
+  assert.equal((await readNote()).internal_notes, "", "the sweep reaches it and clears it");
+
+  // And having cleared it, the row must fall out of the set for good.
+  const second = spawnSync(
+    process.execPath,
+    ["node_modules/tsx/dist/cli.mjs", "scripts/purge-expired.ts"],
+    { encoding: "utf8", env: { ...process.env, LIBSQL_URL: `file:${testDbPath}` } },
+  );
+  assert.doesNotMatch(second.stdout, new RegExp(String(row.id)), "and is not revisited");
 });

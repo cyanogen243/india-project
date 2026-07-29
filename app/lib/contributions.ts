@@ -92,7 +92,10 @@ export function contentFingerprint(bytes: Uint8Array) {
  * do not.
  *
  * The title is set by the caller, since "(withdrawn)" and "(purged)" are
- * different facts about how the row got here.
+ * different facts about how the row got here. `internal_notes` is deliberately
+ * absent: the sweep clears the moderator's note as well, and withdrawal keeps
+ * it. That asymmetry is the one intended difference between the two, and the
+ * reasoning lives at the sweep's call site.
  */
 export const ERASED_CONTRIBUTION_COLUMNS = `storage_key = NULL, social_storage_key = NULL,
   body = '', subtitle = '', credit = '', credit_account = '', source_url = '',
