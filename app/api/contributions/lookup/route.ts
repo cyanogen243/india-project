@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { consumeRateLimit, ensureDatabase, writeAuditEvent } from "@/app/lib/database";
-import { hashRecoveryCode, normalizeRecoveryCode } from "@/app/lib/contributions";
+import {
+  ERASED_CONTRIBUTION_COLUMNS,
+  hashRecoveryCode,
+  normalizeRecoveryCode,
+} from "@/app/lib/contributions";
 import { deleteObject } from "@/app/lib/storage";
 
 export const dynamic = "force-dynamic";
@@ -85,10 +89,8 @@ export async function POST(request: NextRequest) {
       // gets it erased here, which is what the UI already promises.
       await db.execute({
         sql: `UPDATE contributions
-              SET status = 'withdrawn', storage_key = NULL, social_storage_key = NULL,
-                  body = '', title = '(withdrawn)', subtitle = '',
-                  credit = '', credit_account = '', source_url = '',
-                  content_fingerprint = NULL,
+              SET status = 'withdrawn', title = '(withdrawn)',
+                  ${ERASED_CONTRIBUTION_COLUMNS},
                   updated_at = ?, retention_eligible_at = ?
               WHERE id = ?`,
         args: [

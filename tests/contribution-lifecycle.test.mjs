@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { after, before, beforeEach, test } from "node:test";
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { generateKeyPairSync } from "node:crypto";
 import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import net from "node:net";
 import { createClient } from "@libsql/client";
+import { NO_BUCKET_ENV, startTestServer, stopTestServer } from "./helpers/server.mjs";
 
 /**
  * Covers the contribution wall end to end against a real server and a
@@ -23,28 +23,6 @@ let db;
 const superAdminEmail = "owner@example.test";
 const superAdminPassword = "LocalReviewPassword!2026";
 
-async function getAvailablePort() {
-  return new Promise((resolve, reject) => {
-    const probe = net.createServer();
-    probe.unref();
-    probe.on("error", reject);
-    probe.listen(0, "127.0.0.1", () => {
-      const address = probe.address();
-      probe.close(() => resolve(address.port));
-    });
-  });
-}
-
-async function waitForServer(url) {
-  for (let attempt = 0; attempt < 60; attempt += 1) {
-    try {
-      const response = await fetch(url);
-      if (response.ok) return;
-    } catch {}
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  throw new Error("Next.js production server did not start");
-}
 
 // The route rejects anything submitted faster than a human could type, so a
 // test submission has to claim a plausible start time.
@@ -137,40 +115,15 @@ before(async () => {
     // These run against a production build with no bucket on purpose; the
     // driver refuses that combination unless it is asked for explicitly.
     ART_S3_ALLOW_LOCAL_DISK: "yes",
+    ...NO_BUCKET_ENV,
   };
-  // Set empty rather than deleted: Next loads .env.local itself, and that file
-  // points at a local Garage bucket. Deleting these let the real bucket back
-  // in, so the suite silently depended on Garage running.
-  testEnv.ART_S3_ENDPOINT = "";
-  testEnv.ART_S3_BUCKET = "";
-  testEnv.ART_S3_ACCESS_KEY_ID = "";
-  testEnv.ART_S3_SECRET_ACCESS_KEY = "";
-  testEnv.ART_S3_REGION = "";
 
-  const bootstrap = spawnSync(
-    process.execPath,
-    ["node_modules/tsx/dist/cli.mjs", "scripts/bootstrap-admin.ts"],
-    { env: testEnv, encoding: "utf8" },
-  );
-  assert.equal(bootstrap.status, 0, bootstrap.stderr || bootstrap.stdout);
-
-  const port = await getAvailablePort();
-  baseUrl = `http://127.0.0.1:${port}`;
-  server = spawn(
-    process.execPath,
-    ["node_modules/next/dist/bin/next", "start", "-H", "127.0.0.1", "-p", String(port)],
-    { stdio: "ignore", env: testEnv },
-  );
-  await waitForServer(baseUrl);
+  ({ server, baseUrl } = await startTestServer(testEnv));
   db = createClient({ url: `file:${testDbPath}` });
 });
 
 after(async () => {
-  if (server && server.exitCode === null) {
-    const exited = new Promise((resolve) => server.once("exit", resolve));
-    server.kill("SIGTERM");
-    await exited;
-  }
+  await stopTestServer(server);
   if (testDbDir) await rm(testDbDir, { recursive: true, force: true });
 });
 
@@ -1564,4 +1517,177 @@ test("the retention sweep does not keep re-purging what it already purged", asyn
   });
   assert.ok(rows[0].retention_eligible_at, "the date stays so the timeline survives");
   assert.equal(rows[0].status, "declined");
+});
+
+test("a failed insert takes its files back out of storage", async () => {
+  // The compensation path had never actually run — it was written by reading
+  // the code, which is how it shipped with the bug that the keys it cleans up
+  // are assigned only after both puts succeed. Force the insert to fail and
+  // watch the bucket, rather than trusting that the handler is right.
+  const { readdir } = await import("node:fs/promises");
+  const uploads = path.join(process.cwd(), "data", "uploads");
+  const before = new Set(await readdir(uploads).catch(() => []));
+
+  await db.execute(`CREATE TRIGGER induced_insert_failure
+    BEFORE INSERT ON contributions
+    BEGIN SELECT RAISE(ABORT, 'induced failure'); END`);
+  let sent;
+  try {
+    const bytes = await readFile("content/seed-art/poster-stripes.png");
+    sent = await submit(
+      { kind: "poster", title: "Test Insert Failure" },
+      { bytes, type: "image/png", name: "poster.png" },
+    );
+  } finally {
+    await db.execute("DROP TRIGGER induced_insert_failure");
+  }
+
+  assert.notEqual(sent.status, 201, "the submission must not report success");
+  const after = await readdir(uploads).catch(() => []);
+  const leaked = after.filter((name) => !before.has(name));
+  assert.deepEqual(
+    leaked,
+    [],
+    `the failed submission left ${leaked.length} file(s) nothing points at: ${leaked.join(", ")}`,
+  );
+
+  const { rows } = await db.execute({
+    sql: "SELECT count(*) AS n FROM contributions WHERE title = ?",
+    args: ["Test Insert Failure"],
+  });
+  assert.equal(Number(rows[0].n), 0, "and no row was written either");
+});
+
+test("a submission survives an audit line that will not write", async () => {
+  // Past the insert the contributor's only copy of their recovery code is in
+  // the response we are about to send. Turning an audit failure into an error
+  // page would leave a row nobody can ever withdraw.
+  await db.execute(`CREATE TRIGGER induced_audit_failure
+    BEFORE INSERT ON audit_events
+    BEGIN SELECT RAISE(ABORT, 'induced failure'); END`);
+  let sent;
+  try {
+    sent = await submit({
+      kind: "poem",
+      title: "Test Audit Failure",
+      body: "A verse submitted while the audit table refuses writes.",
+      credit: "Alias",
+    });
+  } finally {
+    await db.execute("DROP TRIGGER induced_audit_failure");
+  }
+
+  assert.equal(sent.status, 201, "the contributor still gets their code");
+  assert.ok(sent.body?.recoveryCode, "and the code is actually in the response");
+
+  const stored = await rowByTitle("Test Audit Failure");
+  assert.ok(stored, "the submission is stored");
+
+  // The code the contributor was handed must still work, or the row is one
+  // they can never reach.
+  const status = await lookup(sent.body.recoveryCode, "status");
+  assert.equal(status.status, 200, "and the code they were given still resolves");
+});
+
+test("withdrawal and the sweep erase the same columns", async () => {
+  // Written out separately these two had already drifted: withdrawal cleared
+  // the content fingerprint and the sweep left it, keeping a hash of material
+  // the project had just promised to delete. They share one definition now,
+  // and this fails if either grows a column the other does not.
+  const withdrawTitle = "Test Erasure Parity Withdrawn";
+  const sweepTitle = "Test Erasure Parity Swept";
+  const body = "Words that should not outlive the decision about them.";
+
+  const first = await submit({ kind: "poem", title: withdrawTitle, body, credit: "Alias" });
+  await lookup(first.body.recoveryCode, "withdraw");
+
+  await submit({ kind: "poem", title: sweepTitle, body, credit: "Alias" });
+  const swept = await rowByTitle(sweepTitle);
+  const session = await adminSession();
+  await moderate(session, {
+    id: String(swept.id),
+    status: "declined",
+    declineReason: "identifying_info",
+    internalNotes: "",
+  });
+  await db.execute({
+    sql: "UPDATE contributions SET retention_eligible_at = ? WHERE id = ?",
+    args: ["2020-01-01T00:00:00.000Z", swept.id],
+  });
+  const sweep = spawnSync(
+    process.execPath,
+    ["node_modules/tsx/dist/cli.mjs", "scripts/purge-expired.ts"],
+    { encoding: "utf8", env: { ...process.env, LIBSQL_URL: `file:${testDbPath}` } },
+  );
+  assert.equal(sweep.status, 0, sweep.stderr || sweep.stdout);
+
+  const columns = [
+    "storage_key",
+    "social_storage_key",
+    "body",
+    "subtitle",
+    "credit",
+    "credit_account",
+    "source_url",
+    "content_fingerprint",
+  ];
+  const read = async (title) => {
+    const { rows } = await db.execute({
+      sql: `SELECT ${columns.join(", ")} FROM contributions WHERE title = ?`,
+      args: [title],
+    });
+    return rows[0];
+  };
+  const withdrawn = await read("(withdrawn)");
+  const purged = await read("(purged)");
+  assert.ok(withdrawn, "the withdrawn row is findable by its placeholder title");
+  assert.ok(purged, "so is the purged one");
+
+  for (const column of columns) {
+    const emptied = (value) => value === null || value === "";
+    assert.ok(emptied(withdrawn[column]), `withdrawal leaves ${column} empty`);
+    assert.ok(
+      emptied(purged[column]),
+      `the sweep leaves ${column} empty too — it did not, for ${column}`,
+    );
+  }
+});
+
+test("the sweep never touches a live contribution, whatever date it carries", async () => {
+  // Approving clears the retention date, so an approved row should never have
+  // one. The sweep deletes irreversibly, though, and if that invariant is ever
+  // broken elsewhere the failure is a published work disappearing 180 days
+  // later with nothing to explain it. The date alone must not be enough.
+  const title = "Test Live Row Survives The Sweep";
+  const bytes = await readFile("content/seed-art/poster-stripes.png");
+  await submit({ kind: "poster", title }, { bytes, type: "image/png", name: "poster.png" });
+  const row = await rowByTitle(title);
+  const session = await adminSession();
+  await moderate(session, { id: String(row.id), status: "approved", internalNotes: "" });
+
+  const approved = await rowByTitle(title);
+  assert.equal(
+    approved.retention_eligible_at,
+    null,
+    "approving clears the retention date in the first place",
+  );
+
+  // Force the state this guard exists for: a live row wearing an expired date.
+  await db.execute({
+    sql: "UPDATE contributions SET retention_eligible_at = ? WHERE id = ?",
+    args: ["2020-01-01T00:00:00.000Z", row.id],
+  });
+
+  const sweep = spawnSync(
+    process.execPath,
+    ["node_modules/tsx/dist/cli.mjs", "scripts/purge-expired.ts"],
+    { encoding: "utf8", env: { ...process.env, LIBSQL_URL: `file:${testDbPath}` } },
+  );
+  assert.equal(sweep.status, 0, sweep.stderr || sweep.stdout);
+  assert.doesNotMatch(sweep.stdout, new RegExp(String(row.id)), "the sweep leaves it alone");
+
+  const survived = await rowByTitle(title);
+  assert.ok(survived, "the approved work is still there");
+  assert.ok(survived.storage_key, "with its file");
+  assert.equal(survived.status, "approved");
 });

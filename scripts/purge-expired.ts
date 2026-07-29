@@ -1,3 +1,4 @@
+import { ERASED_CONTRIBUTION_COLUMNS } from "../app/lib/contributions";
 import { ensureDatabase } from "../app/lib/database";
 import { deleteObject } from "../app/lib/storage";
 
@@ -32,7 +33,13 @@ export async function purgeExpired({ dryRun = false, now = new Date() } = {}) {
   // while the identical decision about a poster was honoured. Writing is the
   // kind most likely to carry the identifying detail the reason exists for.
   //
-  // The second clause is what stops a swept row being swept again on every
+  // The status clause is belt and braces. Approving a row already clears its
+  // retention date, so a live contribution should never carry one — but this
+  // script deletes irreversibly, and the cost of that invariant being wrong
+  // somewhere else is a published work vanishing 180 days later with no
+  // explanation. Cheap to state here; expensive to discover.
+  //
+  // The last clause is what stops a swept row being swept again on every
   // subsequent run: the retention date stays on the row so the decision keeps
   // its timeline, and "already emptied" is read off the row's own contents.
   // Withdrawn rows are emptied the same way at withdrawal, so they fall out of
@@ -40,7 +47,8 @@ export async function purgeExpired({ dryRun = false, now = new Date() } = {}) {
   const expired = await db.execute({
     sql: `SELECT id, title, status, storage_key, social_storage_key
           FROM contributions
-          WHERE retention_eligible_at IS NOT NULL
+          WHERE status IN ('declined', 'withdrawn')
+            AND retention_eligible_at IS NOT NULL
             AND retention_eligible_at <= ?
             AND (storage_key IS NOT NULL
                  OR social_storage_key IS NOT NULL
@@ -64,9 +72,8 @@ export async function purgeExpired({ dryRun = false, now = new Date() } = {}) {
       // need the words that prompted it.
       await db.execute({
         sql: `UPDATE contributions
-              SET storage_key = NULL, social_storage_key = NULL,
-                  body = '', title = '(purged)', subtitle = '',
-                  credit = '', credit_account = '', source_url = '',
+              SET title = '(purged)',
+                  ${ERASED_CONTRIBUTION_COLUMNS},
                   updated_at = ?
               WHERE id = ?`,
         args: [cutoff, row.id],

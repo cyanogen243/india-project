@@ -160,6 +160,11 @@ function withoutControlCharacters(value: unknown) {
 }
 
 export async function POST(request: NextRequest) {
+  // Keys of objects this request has put, or is about to. One list, cleaned up
+  // in one place, because every failure after the first byte reaches storage
+  // has the same consequence: files no row points at, which no withdrawal and
+  // no retention sweep can ever reach.
+  const written: string[] = [];
   try {
     // Checked before the body is read, so a caller already over the limit
     // cannot make the server buffer and parse a 4 MB upload. The allowance is
@@ -293,23 +298,16 @@ export async function POST(request: NextRequest) {
           { status: 429 },
         );
       }
-      // Both puts are compensated as one unit. Assigning the keys only after
-      // both succeeded looks safer and is the opposite: if the second put
-      // failed, the first object was already in the bucket and the variables
-      // the cleanup path reads were still null, so nothing removed it and no
-      // row ever pointed at it. Deleting a key that was never written is a
-      // no-op, which makes the blunt "remove both" correct either way.
-      try {
-        await putObject(processed.printKey, processed.printBytes, processed.mimeType);
-        await putObject(processed.socialKey, processed.socialBytes, "image/jpeg");
-      } catch (error) {
-        for (const key of [processed.printKey, processed.socialKey]) {
-          await deleteObject(key).catch((cleanupError) => {
-            console.error("orphaned contribution object", key, cleanupError);
-          });
-        }
-        throw error;
-      }
+      // Recorded before the write, not after it. Assigning only once a put has
+      // returned looks safer and is the opposite: a failure on the second put
+      // left the first object in the bucket while the cleanup list was still
+      // empty, so nothing removed it and no row ever pointed at it. Naming a
+      // key that was never written costs a no-op delete; missing one costs an
+      // unreviewed upload kept forever.
+      written.push(processed.printKey);
+      await putObject(processed.printKey, processed.printBytes, processed.mimeType);
+      written.push(processed.socialKey);
+      await putObject(processed.socialKey, processed.socialBytes, "image/jpeg");
       storageKey = processed.printKey;
       socialStorageKey = processed.socialKey;
       mimeType = processed.mimeType;
@@ -352,51 +350,36 @@ export async function POST(request: NextRequest) {
     const db = await ensureDatabase();
     const now = new Date().toISOString();
     const id = randomUUID();
-    try {
-      await db.execute({
-        sql: `INSERT INTO contributions
+    await db.execute({
+      sql: `INSERT INTO contributions
         (id, kind, title, subtitle, credit, credit_account, provenance, source_url,
          body, language, storage_key, social_storage_key, mime_type, width, height,
          byte_size, status, internal_notes, content_fingerprint, recovery_code_hash,
          created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', '', ?, ?, ?, ?)`,
-        args: [
-          id,
-          fields.kind,
-          fields.title,
-          fields.subtitle,
-          fields.credit,
-          fields.creditAccount,
-          fields.provenance,
-          fields.provenance === "public_domain" ? fields.sourceUrl : "",
-          isFileKind ? "" : fields.body,
-          fields.language,
-          storageKey,
-          socialStorageKey,
-          mimeType,
-          width,
-          height,
-          byteSize,
-          fingerprint,
-          hashRecoveryCode(code),
-          now,
-          now,
-        ],
-      });
-    } catch (error) {
-      // The objects are already in the bucket. Without this the row that would
-      // have pointed at them never exists, so nothing — not withdrawal, not
-      // the retention sweep, not a moderator — can ever reach them again: an
-      // unreviewed upload kept forever by accident. Compensate, then let the
-      // handler below turn the failure into a message.
-      for (const key of [storageKey, socialStorageKey]) {
-        if (!key) continue;
-        await deleteObject(key).catch((cleanupError) => {
-          console.error("orphaned contribution object", key, cleanupError);
-        });
-      }
-      throw error;
-    }
+      args: [
+        id,
+        fields.kind,
+        fields.title,
+        fields.subtitle,
+        fields.credit,
+        fields.creditAccount,
+        fields.provenance,
+        fields.provenance === "public_domain" ? fields.sourceUrl : "",
+        isFileKind ? "" : fields.body,
+        fields.language,
+        storageKey,
+        socialStorageKey,
+        mimeType,
+        width,
+        height,
+        byteSize,
+        fingerprint,
+        hashRecoveryCode(code),
+        now,
+        now,
+      ],
+    });
 
     // The recovery code is deliberately absent from the audit trail: it is the
     // contributor's only credential and nothing stored should be able to
@@ -417,6 +400,13 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ok: true, recoveryCode: code }, { status: 201 });
   } catch (error) {
+    // Nothing below this line stores anything, so reaching here means the
+    // submission failed and any object already written belongs to no one.
+    for (const key of written) {
+      await deleteObject(key).catch((cleanupError) => {
+        console.error("orphaned contribution object", key, cleanupError);
+      });
+    }
     if (error instanceof z.ZodError) {
       return validationResponse(
         error,
