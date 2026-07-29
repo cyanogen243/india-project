@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { ensureDatabase } from "../app/lib/database";
 import { contentFingerprint, processImage } from "../app/lib/contributions";
-import { putObject } from "../app/lib/storage";
+import { discardStoredObjects, putProcessedImage } from "../app/lib/storage";
 
 /**
  * Seeds the contribution wall from content/seed-art. Idempotent: fixed ids and
@@ -145,13 +145,15 @@ export async function seedContributions() {
     let byteSize: number | null = null;
     let fingerprint: string | null = null;
     let body = "";
+    // Scoped to this seed, not the whole run: an earlier seed's objects belong
+    // to a row that already references them and must survive a later failure.
+    const written: string[] = [];
 
     if (seed.file) {
       const bytes = new Uint8Array(await readFile(`content/seed-art/${seed.file}`));
       // Same pipeline as real uploads: re-encode, strip metadata, size variants.
       const processed = await processImage(bytes);
-      await putObject(processed.printKey, processed.printBytes, processed.mimeType);
-      await putObject(processed.socialKey, processed.socialBytes, "image/jpeg");
+      await putProcessedImage(processed, written);
       storageKey = processed.printKey;
       socialKey = processed.socialKey;
       mimeType = processed.mimeType;
@@ -164,7 +166,8 @@ export async function seedContributions() {
       body = (await readFile(`content/seed-art/${seed.textFile}`, "utf8")).trim();
     }
 
-    await db.execute({
+    try {
+      await db.execute({
       sql: `INSERT OR IGNORE INTO contributions
         (id, kind, title, subtitle, credit, credit_account, provenance, source_url,
          body, language, storage_key, social_storage_key, mime_type, width, height,
@@ -180,7 +183,14 @@ export async function seedContributions() {
         byteSize, fingerprint, seed.placeholder ? 1 : 0,
         seedCodeHash(seed.id), seed.sortAt, now,
       ],
-    });
+      });
+    } catch (error) {
+      // The files are already in the bucket and the row that would point at
+      // them does not exist. Re-running the seed mints fresh keys, so without
+      // this these would sit there forever with nothing referencing them.
+      await discardStoredObjects(written);
+      throw error;
+    }
     console.log(`seeded ${seed.kind}: ${seed.title}`);
   }
 }

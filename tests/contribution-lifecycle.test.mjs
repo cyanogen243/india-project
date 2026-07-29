@@ -124,6 +124,9 @@ before(async () => {
 
 after(async () => {
   await stopTestServer(server);
+  // Before the directory goes: an open client keeps a handle on the database
+  // file, which makes the removal fail on Windows.
+  db?.close();
   if (testDbDir) await rm(testDbDir, { recursive: true, force: true });
 });
 
@@ -703,6 +706,11 @@ test("a database created before provenance existed upgrades in place", async () 
     "the fixture really is the old schema",
   );
 
+  // Closed before the migration runs, not after. Two processes holding native
+  // handles on one SQLite file is an access violation on Windows, and the
+  // handle is also what makes the temp directory un-removable at the end.
+  legacy.close();
+
   const upgrade = spawnSync(
     process.execPath,
     ["node_modules/tsx/dist/cli.mjs", "scripts/db-setup.ts"],
@@ -710,8 +718,8 @@ test("a database created before provenance existed upgrades in place", async () 
   );
   assert.equal(upgrade.status, 0, upgrade.stderr || upgrade.stdout);
 
-  // A fresh client: the connection that created the fixture can hold a stale
-  // schema after the table is dropped and renamed underneath it.
+  // A fresh client: the connection that created the fixture held a stale schema
+  // after the table was dropped and renamed underneath it, and is now closed.
   const upgraded = createClient({ url: `file:${legacyPath}` });
   const row = await upgraded.execute(
     "SELECT * FROM contributions WHERE id = '11111111-1111-4111-8111-111111111111'",
@@ -739,10 +747,15 @@ test("a database created before provenance existed upgrades in place", async () 
   const firstRunTotal = firstRun.rows[0].total;
 
   // The whole reason for the rebuild: the new reason must now be storable.
-  await legacy.execute(
+  // Through the post-rebuild client, not the one that created the fixture — a
+  // connection that predates the table being dropped and renamed underneath it
+  // is testing the old CHECK constraint, not the new one.
+  await upgraded.execute(
     `UPDATE contributions SET decline_reason = 'not_public_domain'
      WHERE id = '11111111-1111-4111-8111-111111111111'`,
   );
+
+  upgraded.close();
 
   // And running it again must be a no-op rather than a second rebuild.
   const again = spawnSync(
@@ -765,6 +778,7 @@ test("a database created before provenance existed upgrades in place", async () 
   );
   assert.equal(Number(legacyStillThere.rows[0].total), 1, "and the pre-existing row is untouched");
 
+  fresh.close();
   await rm(legacyDir, { recursive: true, force: true });
 });
 

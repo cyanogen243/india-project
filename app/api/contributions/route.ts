@@ -11,7 +11,7 @@ import {
   hashRecoveryCode,
   processImage,
 } from "@/app/lib/contributions";
-import { deleteObject, putObject } from "@/app/lib/storage";
+import { discardStoredObjects, putProcessedImage } from "@/app/lib/storage";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -299,16 +299,7 @@ export async function POST(request: NextRequest) {
           { status: 429 },
         );
       }
-      // Recorded before the write, not after it. Assigning only once a put has
-      // returned looks safer and is the opposite: a failure on the second put
-      // left the first object in the bucket while the cleanup list was still
-      // empty, so nothing removed it and no row ever pointed at it. Naming a
-      // key that was never written costs a no-op delete; missing one costs an
-      // unreviewed upload kept forever.
-      written.push(processed.printKey);
-      await putObject(processed.printKey, processed.printBytes, processed.mimeType);
-      written.push(processed.socialKey);
-      await putObject(processed.socialKey, processed.socialBytes, "image/jpeg");
+      await putProcessedImage(processed, written);
       storageKey = processed.printKey;
       socialStorageKey = processed.socialKey;
       mimeType = processed.mimeType;
@@ -403,11 +394,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     // Nothing below this line stores anything, so reaching here means the
     // submission failed and any object already written belongs to no one.
-    for (const key of written) {
-      await deleteObject(key).catch((cleanupError) => {
-        console.error("orphaned contribution object", key, cleanupError);
-      });
-    }
+    await discardStoredObjects(written);
     if (error instanceof z.ZodError) {
       return validationResponse(
         error,

@@ -150,10 +150,10 @@ export async function processImage(input: Uint8Array): Promise<ProcessedImage> {
 
   const source = sharp(Buffer.from(input), { failOn: "error", limitInputPixels: MAX_INPUT_PIXELS });
   const metadata = await source.metadata();
-  // sharp reports metadata.width/height before EXIF orientation is applied,
-  // but both variants below are produced through .rotate(). A portrait phone
-  // photo would otherwise be recorded transposed — wrong dimensions in the
-  // caption, and a wrongly shaped box reserved on the wall.
+  // Only a readability check: a file whose header declares no usable size is
+  // refused here rather than part-way through encoding. The dimensions that get
+  // recorded come from the encoded print variant further down, since that is
+  // the file the number will describe.
   const oriented = metadata.autoOrient ?? { width: metadata.width, height: metadata.height };
   if (!oriented.width || !oriented.height) {
     throw new Error("That image could not be read.");
@@ -176,12 +176,15 @@ export async function processImage(input: Uint8Array): Promise<ProcessedImage> {
   })
     .rotate()
     .resize(PRINT_MAX_EDGE, PRINT_MAX_EDGE, { fit: "inside", withoutEnlargement: true });
-  const printBytes = new Uint8Array(
-    await (printIsPhotographic
-      ? printPipeline.jpeg({ quality: 92, chromaSubsampling: "4:4:4" })
-      : printPipeline.png({ compressionLevel: 9 })
-    ).toBuffer(),
-  );
+  // `resolveWithObject` so the dimensions come from what was actually encoded.
+  // Reporting the pre-resize size meant a 6000x1000 upload was stored as
+  // 5000x833 and recorded as 6000x1000 — a number shown to visitors as the
+  // print size, describing a file that does not exist.
+  const printResult = await (printIsPhotographic
+    ? printPipeline.jpeg({ quality: 92, chromaSubsampling: "4:4:4" })
+    : printPipeline.png({ compressionLevel: 9 })
+  ).toBuffer({ resolveWithObject: true });
+  const printBytes = new Uint8Array(printResult.data);
   if (printBytes.byteLength > MAX_STORED_BYTES) {
     throw new Error("Only PNG, JPEG and WebP images are accepted.");
   }
@@ -204,7 +207,7 @@ export async function processImage(input: Uint8Array): Promise<ProcessedImage> {
     printBytes,
     socialBytes,
     mimeType: printIsPhotographic ? "image/jpeg" : "image/png",
-    width: oriented.width,
-    height: oriented.height,
+    width: printResult.info.width,
+    height: printResult.info.height,
   };
 }

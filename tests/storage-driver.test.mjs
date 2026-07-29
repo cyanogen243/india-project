@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { createClient } from "@libsql/client";
 import { startTestServer, stopTestServer } from "./helpers/server.mjs";
+import sharp from "sharp";
 import { startMockS3 } from "./helpers/mock-s3.mjs";
 
 /**
@@ -56,6 +57,26 @@ async function submitPoster(title) {
   return { status: response.status, body: await response.json().catch(() => null) };
 }
 
+async function adminSession() {
+  const login = await fetch(`${baseUrl}/api/admin`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      action: "login",
+      email: superAdminEmail,
+      password: superAdminPassword,
+    }),
+  });
+  assert.equal(login.status, 200, "admin sign-in should succeed");
+  const cookie = (login.headers.getSetCookie?.() ?? [])
+    .map((value) => value.split(";")[0])
+    .join("; ");
+  // The CSRF token rides in the session payload, not a cookie.
+  const state = await fetch(`${baseUrl}/api/admin`, { headers: { cookie } });
+  const csrfToken = (await state.json())?.user?.csrfToken ?? "";
+  return { cookie, csrfToken };
+}
+
 async function resetRateLimits() {
   await db.execute("DELETE FROM rate_limits");
 }
@@ -89,6 +110,9 @@ before(async () => {
 after(async () => {
   await stopTestServer(server);
   await s3?.close();
+  // An open client holds a handle on the database file, which makes removing
+  // the directory fail on Windows.
+  db?.close();
   if (testDbDir) await rm(testDbDir, { recursive: true, force: true });
 });
 
@@ -156,20 +180,7 @@ test("an approved upload is served back out of the bucket", async () => {
   });
   const id = String(rows[0].id);
 
-  const login = await fetch(`${baseUrl}/api/admin`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      action: "login",
-      email: superAdminEmail,
-      password: superAdminPassword,
-    }),
-  });
-  const cookie = (login.headers.getSetCookie?.() ?? [])
-    .map((value) => value.split(";")[0])
-    .join("; ");
-  const state = await fetch(`${baseUrl}/api/admin`, { headers: { cookie } });
-  const csrfToken = (await state.json())?.user?.csrfToken ?? "";
+  const { cookie, csrfToken } = await adminSession();
 
   const pending = await fetch(`${baseUrl}/api/contributions/${id}/file`);
   assert.equal(pending.status, 404, "an unreviewed upload is not served");
@@ -201,4 +212,118 @@ test("an approved upload is served back out of the bucket", async () => {
   });
   assert.equal(deleted.status, 200);
   assert.deepEqual(s3.keys(), [], "the bucket is empty once the record is gone");
+});
+
+test("stored dimensions describe the file that was stored", async () => {
+  // A 6000x1000 upload is resized to fit a 5000px edge, so it lands as
+  // 5000x833. The row used to record 6000x1000 — the pre-resize size — and the
+  // gallery shows that number to visitors as the print size, describing a file
+  // that does not exist.
+  await resetRateLimits();
+  const wide = await sharp({
+    create: { width: 6000, height: 1000, channels: 3, background: { r: 20, g: 40, b: 90 } },
+  })
+    .png()
+    .toBuffer();
+
+  const form = new FormData();
+  for (const [key, value] of Object.entries({
+    kind: "poster",
+    title: "S3 Dimension Report",
+    subtitle: "",
+    credit: "",
+    creditAccount: "",
+    body: "",
+    language: "en",
+    consent: "yes",
+    website: "",
+    provenance: "own",
+    sourceUrl: "",
+    startedAt: String(Date.now() - 30_000),
+  })) {
+    form.set(key, value);
+  }
+  form.set("file", new Blob([wide], { type: "image/png" }), "wide.png");
+  const sent = await fetch(`${baseUrl}/api/contributions`, { method: "POST", body: form });
+  assert.equal(sent.status, 201, await sent.text());
+
+  const { rows } = await db.execute({
+    sql: "SELECT width, height, byte_size, storage_key FROM contributions WHERE title = ?",
+    args: ["S3 Dimension Report"],
+  });
+  const row = rows[0];
+
+  // What the bucket actually holds, measured rather than assumed.
+  const stored = s3.get(String(row.storage_key));
+  const actual = await sharp(Buffer.from(stored.bytes)).metadata();
+
+  assert.equal(Number(row.width), actual.width, "recorded width matches the stored file");
+  assert.equal(Number(row.height), actual.height, "recorded height matches the stored file");
+  assert.ok(actual.width <= 5000, "and the stored file respects the print edge");
+  assert.notEqual(Number(row.width), 6000, "the pre-resize width is not what gets recorded");
+  assert.equal(
+    Number(row.byte_size),
+    stored.bytes.byteLength,
+    "byte size describes the stored file too",
+  );
+});
+
+test("a curated upload that fails to store leaves nothing behind either", async () => {
+  // Curation stores the same two objects the public form does. The public path
+  // was given compensation and this one was not, so the identical failure —
+  // print variant accepted, social variant refused — orphaned a file here that
+  // no row pointed at and nothing could reach.
+  await resetRateLimits();
+  const { cookie, csrfToken } = await adminSession();
+  const before = new Set(s3.keys());
+  s3.failPutsWhere((key) => key.endsWith("-social.jpg"));
+
+  let response;
+  try {
+    const bytes = await readFile("content/seed-art/poster-stripes.png");
+    const form = new FormData();
+    for (const [key, value] of Object.entries({
+      kind: "poster",
+      title: "S3 Curated Half Written",
+      subtitle: "",
+      credit: "The India Project",
+      creditAccount: "",
+      body: "",
+      language: "en",
+      provenance: "own",
+      sourceUrl: "",
+      status: "approved",
+      placeholder: "",
+    })) {
+      form.set(key, value);
+    }
+    form.set("file", new Blob([bytes], { type: "image/png" }), "poster.png");
+    response = await fetch(`${baseUrl}/api/admin/contributions`, {
+      method: "POST",
+      headers: { cookie, "x-tip-csrf": csrfToken },
+      body: form,
+    });
+  } finally {
+    s3.failPutsWhere(null);
+  }
+
+  // The status has to be the one the storage failure produces. Asserting only
+  // "not 201" passed for a rejected request that never stored anything, which
+  // is how this test came to prove nothing.
+  const body = await response.text();
+  assert.equal(response.status, 400, `expected a storage failure, got ${response.status}: ${body}`);
+  assert.match(body, /Injected failure/, "and specifically the injected put failure");
+
+  const leaked = s3.keys().filter((key) => !before.has(key));
+  assert.deepEqual(
+    leaked,
+    [],
+    `a half-finished curation left ${leaked.length} object(s) nothing points at: ${leaked.join(", ")}`,
+  );
+
+  const { rows } = await db.execute({
+    sql: "SELECT count(*) AS n FROM contributions WHERE title = ?",
+    args: ["S3 Curated Half Written"],
+  });
+  assert.equal(Number(rows[0].n), 0, "and no row was written");
 });

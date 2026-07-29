@@ -172,6 +172,50 @@ export async function deleteObject(key: string) {
   await rm(localPath(key), { force: true });
 }
 
+/**
+ * Stores both variants of a processed image, recording each key in `written`
+ * *before* its write is attempted.
+ *
+ * The ordering is the whole point, and it is easy to get backwards. Recording a
+ * key only once its put has returned looks safer and is the opposite: a failure
+ * on the second write left the first object in the bucket while the list the
+ * cleanup path reads was still empty. Naming a key that was never written costs
+ * a no-op delete; missing one costs an unreviewed upload kept forever, because
+ * every path that deletes an object starts from a database row.
+ *
+ * Three callers store images — the public form, admin curation, and the seed
+ * script — and each needs the same guarantee, so the ordering rule lives here
+ * rather than being restated correctly three times.
+ */
+export async function putProcessedImage(
+  processed: {
+    printKey: string;
+    printBytes: Uint8Array;
+    mimeType: string;
+    socialKey: string;
+    socialBytes: Uint8Array;
+  },
+  written: string[],
+) {
+  written.push(processed.printKey);
+  await putObject(processed.printKey, processed.printBytes, processed.mimeType);
+  written.push(processed.socialKey);
+  await putObject(processed.socialKey, processed.socialBytes, "image/jpeg");
+}
+
+/**
+ * Removes objects a request stored before it failed. Never throws: the caller
+ * is already handling a failure, and losing the original error to a cleanup
+ * error would hide why the request failed in the first place.
+ */
+export async function discardStoredObjects(keys: string[]) {
+  for (const key of keys) {
+    await deleteObject(key).catch((error) => {
+      console.error("orphaned contribution object", key, error);
+    });
+  }
+}
+
 export function contentTypeForKey(key: string) {
   if (key.endsWith(".png")) return "image/png";
   if (key.endsWith(".jpg")) return "image/jpeg";

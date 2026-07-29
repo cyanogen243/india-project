@@ -10,7 +10,7 @@ import {
   contentFingerprint,
   processImage,
 } from "@/app/lib/contributions";
-import { putObject } from "@/app/lib/storage";
+import { discardStoredObjects, putProcessedImage } from "@/app/lib/storage";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -38,6 +38,11 @@ const fieldsSchema = z.object({
  * still pass through the same re-encode pipeline as public uploads.
  */
 export async function POST(request: NextRequest) {
+  // Curation stores the same two objects the public form does, and until now
+  // had none of its protection: a failed insert left files no row pointed at,
+  // and every path that deletes an object starts from a row. A moderator adding
+  // a public-domain photograph deserves the same guarantee as a contributor.
+  const written: string[] = [];
   try {
     const user = await getAdminSession(request);
     if (!user) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
@@ -115,8 +120,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Images must be 4 MB or smaller." }, { status: 413 });
       }
       const processed = await processImage(new Uint8Array(await file.arrayBuffer()));
-      await putObject(processed.printKey, processed.printBytes, processed.mimeType);
-      await putObject(processed.socialKey, processed.socialBytes, "image/jpeg");
+      await putProcessedImage(processed, written);
       storageKey = processed.printKey;
       socialStorageKey = processed.socialKey;
       mimeType = processed.mimeType;
@@ -160,9 +164,17 @@ export async function POST(request: NextRequest) {
         fields.status, fingerprint, unusableHash, user.id, now, now, now,
       ],
     });
-    await writeAuditEvent(user.id, "added", "contribution", id, { kind: fields.kind });
+    // The row exists from here on. An audit line that will not write is worth
+    // logging, not worth telling the moderator their work was not saved when it
+    // was — they would add it a second time.
+    try {
+      await writeAuditEvent(user.id, "added", "contribution", id, { kind: fields.kind });
+    } catch (auditError) {
+      console.error("curated contribution stored but audit line failed", id, auditError);
+    }
     return NextResponse.json({ ok: true, id }, { status: 201 });
   } catch (error) {
+    await discardStoredObjects(written);
     if (error instanceof z.ZodError) {
       return NextResponse.json(
         { error: error.issues[0]?.message ?? "Check the fields." },
