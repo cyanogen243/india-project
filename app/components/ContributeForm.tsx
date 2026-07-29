@@ -365,7 +365,11 @@ export function ContributeForm({ language }: { language: Language }) {
               onChange={(event) => acceptFile(event.target.files?.[0])}
             />
           </label>
-          <small>{hindi ? "PNG, JPEG या WebP · अधिकतम 4 MB" : "PNG, JPEG or WebP · 4 MB maximum"}</small>
+          <small>
+            {hindi
+              ? "PNG, JPEG या WebP · अधिकतम 4 MB · A3 तक छपने लायक रखा जाता है"
+              : "PNG, JPEG or WebP · 4 MB maximum · kept at print quality up to A3"}
+          </small>
         </div>
       ) : (
         <label>

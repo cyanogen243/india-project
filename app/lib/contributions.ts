@@ -80,10 +80,16 @@ export function contentFingerprint(bytes: Uint8Array) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-// Longest edge of the stored print variant, and a hard ceiling on what any
-// single contribution may occupy in the bucket.
-const PRINT_MAX_EDGE = 3000;
-const MAX_STORED_BYTES = 12 * 1024 * 1024;
+// Longest edge of the stored print variant. A3 at 300dpi is 4961px, A4 is
+// 3508px, so this keeps a poster printable at A3 — the largest size anyone
+// runs off at a copy shop — without storing more than a printer can use.
+// Anything larger is downscaled rather than refused.
+const PRINT_MAX_EDGE = 5000;
+
+// A backstop, not the real control: format-appropriate encoding below keeps a
+// flat-colour poster around 1-3 MB and a photograph around 4-8 MB at this
+// resolution. Only a pathological input reaches this.
+const MAX_STORED_BYTES = 25 * 1024 * 1024;
 
 const SOCIAL_WIDTH = 1080;
 const SOCIAL_HEIGHT = 1350;
@@ -158,12 +164,23 @@ export async function processImage(input: Uint8Array): Promise<ProcessedImage> {
   // one of those sits in the bucket. Print work does not need more than this
   // edge: 3000px is a 25cm print at 300dpi, comfortably past what the wall or
   // a home printer uses.
+  // The print variant keeps the source's family rather than always writing
+  // PNG. Flat-colour poster art compresses to a fraction of its size as PNG
+  // and stays razor sharp; a photograph as lossless PNG is many times larger
+  // than the JPEG it came from for no visible gain. Matching the format to
+  // the material is what makes a generous print resolution affordable.
+  const printIsPhotographic = format !== "png";
+  const printPipeline = sharp(Buffer.from(input), {
+    failOn: "error",
+    limitInputPixels: MAX_INPUT_PIXELS,
+  })
+    .rotate()
+    .resize(PRINT_MAX_EDGE, PRINT_MAX_EDGE, { fit: "inside", withoutEnlargement: true });
   const printBytes = new Uint8Array(
-    await sharp(Buffer.from(input), { failOn: "error", limitInputPixels: MAX_INPUT_PIXELS })
-      .rotate()
-      .resize(PRINT_MAX_EDGE, PRINT_MAX_EDGE, { fit: "inside", withoutEnlargement: true })
-      .png({ compressionLevel: 9 })
-      .toBuffer(),
+    await (printIsPhotographic
+      ? printPipeline.jpeg({ quality: 92, chromaSubsampling: "4:4:4" })
+      : printPipeline.png({ compressionLevel: 9 })
+    ).toBuffer(),
   );
   if (printBytes.byteLength > MAX_STORED_BYTES) {
     throw new Error("Only PNG, JPEG and WebP images are accepted.");
@@ -180,11 +197,13 @@ export async function processImage(input: Uint8Array): Promise<ProcessedImage> {
   const id = randomUUID();
   return {
     id,
-    printKey: `${id}.png`,
+    // The key carries the real format: the file route derives Content-Type
+    // from the key, so a JPEG stored under a .png key would be served as PNG.
+    printKey: `${id}.${printIsPhotographic ? "jpg" : "png"}`,
     socialKey: `${id}-social.jpg`,
     printBytes,
     socialBytes,
-    mimeType: "image/png",
+    mimeType: printIsPhotographic ? "image/jpeg" : "image/png",
     width: oriented.width,
     height: oriented.height,
   };

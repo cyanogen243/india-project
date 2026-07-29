@@ -1358,3 +1358,35 @@ test("a moderator edit cannot produce a row the public form would refuse", async
   });
   assert.equal(tooLong.status, 400, "a poem cannot be edited past the poem cap");
 });
+
+test("a poster is kept printable at A3, in a format that suits it", async () => {
+  // A3 at 300dpi needs a 4961px edge; capping below that would quietly make
+  // the wall's own "download and print" promise untrue.
+  const flat = await readFile("content/seed-art/poster-stripes.png");
+  const posterTitle = "Test Print Quality Poster";
+  assert.equal(
+    (await submit({ kind: "poster", title: posterTitle }, { bytes: flat, type: "image/png", name: "p.png" })).status,
+    201,
+  );
+  const poster = await rowByTitle(posterTitle);
+  assert.equal(poster.mime_type, "image/png", "flat poster art stays lossless");
+
+  const photo = await readFile("content/seed-art/image-breaking-the-salt-law.jpg");
+  const photoTitle = "Test Print Quality Photo";
+  assert.equal(
+    (await submit({ kind: "image", title: photoTitle }, { bytes: photo, type: "image/jpeg", name: "p.jpg" })).status,
+    201,
+  );
+  const stored = await rowByTitle(photoTitle);
+  assert.equal(stored.mime_type, "image/jpeg", "a photograph is not re-encoded to a huge PNG");
+
+  const session = await adminSession();
+  await moderate(session, { id: String(stored.id), status: "approved", internalNotes: "" });
+  const served = await fetch(`${baseUrl}/api/contributions/${stored.id}/file`);
+  assert.equal(served.status, 200);
+  assert.equal(
+    served.headers.get("content-type"),
+    "image/jpeg",
+    "and it is served as what it actually is",
+  );
+});
