@@ -15,7 +15,12 @@ import { dirname, join, resolve } from "node:path";
  *   ART_S3_BUCKET
  *   ART_S3_ACCESS_KEY_ID
  *   ART_S3_SECRET_ACCESS_KEY
- *   ART_S3_REGION     optional, defaults to "auto" (R2's expectation)
+ *   ART_S3_REGION     defaults to "auto", which only Cloudflare R2 accepts.
+ *                     Most providers verify the signing region and reject a
+ *                     mismatch with a 403 that reads like bad credentials. The
+ *                     right value is the region in the endpoint host — for
+ *                     https://s3.eu-west-par.io.cloud.ovh.net that is
+ *                     "eu-west-par". `npm run check:storage` catches this.
  */
 
 export type StoredObject = {
