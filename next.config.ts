@@ -17,6 +17,8 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // Self-contained server bundle for the container image; ignored by Vercel.
+  output: "standalone",
   turbopack: {
     root: process.cwd(),
   },

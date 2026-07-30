@@ -1,0 +1,10 @@
+.git
+node_modules
+.next
+dist
+data
+test-results
+tsconfig.tsbuildinfo
+.env*
+.DS_Store
+Dockerfile
