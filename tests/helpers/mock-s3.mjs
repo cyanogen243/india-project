@@ -22,6 +22,7 @@ export async function startMockS3({ failOnKey = null } = {}) {
   const objects = new Map();
   let failing = failOnKey;
   let failingDeletes = null;
+  let slowDeletes = { remaining: 0, ms: 0 };
 
   const server = http.createServer((req, res) => {
     // Path-style addressing: /<bucket>/<key>. The driver sets forcePathStyle.
@@ -72,6 +73,19 @@ export async function startMockS3({ failOnKey = null } = {}) {
     }
 
     if (req.method === "DELETE") {
+      // A held delete is the only place a caller's read and its later write are
+      // reliably separated, which is what a check-then-write race needs.
+      if (slowDeletes.remaining > 0) {
+        slowDeletes.remaining -= 1;
+        const wait = slowDeletes.ms;
+        setTimeout(() => finishDelete(), wait);
+        return;
+      }
+      finishDelete();
+      return;
+    }
+
+    function finishDelete() {
       if (failingDeletes && failingDeletes(key)) {
         res.writeHead(500, { "content-type": "application/xml" });
         res.end(
@@ -83,7 +97,6 @@ export async function startMockS3({ failOnKey = null } = {}) {
       objects.delete(key);
       res.writeHead(204);
       res.end();
-      return;
     }
 
     res.writeHead(405);
@@ -105,6 +118,10 @@ export async function startMockS3({ failOnKey = null } = {}) {
     /** Start refusing deletes, to test that erasure is not reported as done. */
     failDeletesWhere: (predicate) => {
       failingDeletes = predicate;
+    },
+    /** Hold the next `count` deletes open, to widen a check-then-write window. */
+    delayNextDeletes: (count, ms) => {
+      slowDeletes = { remaining: count, ms };
     },
     close: () =>
       new Promise((resolve) => {

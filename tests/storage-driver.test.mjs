@@ -433,3 +433,73 @@ test("a decline that cannot remove the files changes nothing and says so", async
   assert.equal(retry.status, 200, "a retry works");
   assert.ok(!s3.keys().includes(String(row.storage_key)), "and the file is gone");
 });
+
+test("a withdrawal during moderation is not undone by it", async () => {
+  // The moderator's request reads the status, checks it, deletes the objects,
+  // and only then writes. A withdrawal arriving inside that window used to be
+  // overwritten by a decision made before it existed — putting work back on the
+  // wall that its author had just taken down.
+  //
+  // The delete is the window. Holding it open reproduces the interleaving
+  // deterministically instead of hoping two requests collide.
+  await resetRateLimits();
+  const sent = await submitPoster("S3 Race Poster");
+  assert.equal(sent.status, 201, JSON.stringify(sent.body));
+  const code = sent.body.recoveryCode;
+
+  const { rows } = await db.execute({
+    sql: "SELECT id FROM contributions WHERE title = ?",
+    args: ["S3 Race Poster"],
+  });
+  const id = String(rows[0].id);
+
+  const { cookie, csrfToken } = await adminSession();
+  await fetch(`${baseUrl}/api/admin`, {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie, "x-tip-csrf": csrfToken },
+    body: JSON.stringify({
+      action: "contribution_update",
+      id,
+      status: "approved",
+      internalNotes: "",
+    }),
+  });
+
+  // Hold the moderator's first delete open. Deletes are issued one at a time,
+  // so holding just one leaves the withdrawal's own deletes unheld — it
+  // completes while the decline is still waiting on the bucket.
+  s3.delayNextDeletes(1, 700);
+  const decline = fetch(`${baseUrl}/api/admin`, {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie, "x-tip-csrf": csrfToken },
+    body: JSON.stringify({
+      action: "contribution_update",
+      id,
+      status: "declined",
+      declineReason: "off_topic",
+      internalNotes: "declining",
+    }),
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  const withdrawal = await fetch(`${baseUrl}/api/contributions/lookup`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ code, action: "withdraw" }),
+  });
+  assert.equal(withdrawal.status, 200, "the contributor's withdrawal lands first");
+
+  const declineResponse = await decline;
+  assert.equal(
+    declineResponse.status,
+    409,
+    "and the moderator's write, made before it, is refused",
+  );
+
+  const after = await db.execute({
+    sql: "SELECT status, title FROM contributions WHERE id = ?",
+    args: [id],
+  });
+  assert.equal(after.rows[0].status, "withdrawn", "the contributor's decision stands");
+  assert.equal(after.rows[0].title, "(withdrawn)");
+});
