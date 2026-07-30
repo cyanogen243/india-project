@@ -144,6 +144,67 @@ export const visitorTotals = sqliteTable("visitor_totals", {
   updatedAt: text("updated_at").notNull(),
 });
 
+export const contributions = sqliteTable(
+  "contributions",
+  {
+    id: text("id").primaryKey(),
+    kind: text("kind", { enum: ["poster", "image", "poem", "essay"] }).notNull(),
+    title: text("title").notNull(),
+    subtitle: text("subtitle").notNull().default(""),
+    credit: text("credit").notNull().default(""),
+    creditAccount: text("credit_account").notNull().default(""),
+    body: text("body").notNull().default(""),
+    language: text("language", { enum: ["en", "hi"] }).notNull(),
+    storageKey: text("storage_key"),
+    socialStorageKey: text("social_storage_key"),
+    mimeType: text("mime_type"),
+    width: integer("width"),
+    height: integer("height"),
+    byteSize: integer("byte_size"),
+    status: text("status", {
+      enum: ["pending", "approved", "declined", "withdrawn"],
+    })
+      .notNull()
+      .default("pending"),
+    internalNotes: text("internal_notes").notNull().default(""),
+    contentFingerprint: text("content_fingerprint"),
+    seeded: integer("seeded", { mode: "boolean" }).notNull().default(false),
+    // Scaffolding that ships so the wall is never empty, distinct from the
+    // permanent collection; the admin panel counts these so they are not
+    // quietly kept forever.
+    placeholder: integer("placeholder", { mode: "boolean" }).notNull().default(false),
+    // "own" is the contributor's work under CC BY-NC-SA; "public_domain" is
+    // someone else's work passed on, where credit names the original author
+    // and sourceUrl is the licence page a moderator checked.
+    provenance: text("provenance", { enum: ["own", "public_domain"] })
+      .notNull()
+      .default("own"),
+    sourceUrl: text("source_url").notNull().default(""),
+    declineReason: text("decline_reason", {
+      enum: [
+        "off_topic",
+        "not_own_work",
+        "not_public_domain",
+        "identifying_info",
+        "low_quality",
+        "duplicate",
+        "other",
+      ],
+    }),
+    recoveryCodeHash: text("recovery_code_hash").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    reviewedBy: text("reviewed_by"),
+    reviewedAt: text("reviewed_at"),
+  },
+  (table) => [
+    uniqueIndex("contributions_recovery_code_unique").on(table.recoveryCodeHash),
+    index("contributions_status_idx").on(table.status),
+    index("contributions_fingerprint_idx").on(table.contentFingerprint),
+    index("contributions_created_idx").on(table.createdAt),
+  ],
+);
+
 export const visitorDailyIdentifiers = sqliteTable(
   "visitor_daily_identifiers",
   {

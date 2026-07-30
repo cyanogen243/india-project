@@ -574,6 +574,34 @@ dd {
   background: #f2e8c9;
 }
 
+/* Lifecycle statuses — contributions (pending/approved/declined/withdrawn)
+   and volunteers (new/contacted/accepted/declined/archived) — share the
+   semantic colours of the record badges above: waiting or in progress =
+   amber, accepted = green, refused = red, closed = quiet. */
+.badge-pending,
+.badge-new,
+.badge-contacted {
+  color: #765105;
+  background: #f2e8c9;
+}
+
+.badge-approved,
+.badge-accepted {
+  color: var(--green);
+  background: #e0eee8;
+}
+
+.badge-declined {
+  color: var(--red);
+  background: var(--red-soft);
+}
+
+.badge-withdrawn,
+.badge-archived {
+  color: var(--ink-soft);
+  background: #eadfce;
+}
+
 .stale {
   color: var(--red);
   font-size: 0.72rem;
@@ -1937,9 +1965,6 @@ footer p {
   gap: 1rem;
 }
 
-.volunteer-filter-summary {
-  margin-bottom: 1rem;
-}
 
 .volunteer-admin-empty {
   grid-column: 1 / -1;
@@ -1952,11 +1977,17 @@ footer p {
   padding: 1rem;
   border: 1px solid var(--line);
   background: white;
+  /* Cards sit in equal-height rows; without this a short card beside a tall
+     one (an image beside an essay) spaces its rows across the extra height. */
+  align-content: start;
 }
 
 .volunteer-admin-card > div:first-child {
   display: flex;
   justify-content: space-between;
+  /* Baseline, not the default stretch — a stretched status badge with its
+     999px radius balloons into a circle. */
+  align-items: baseline;
 }
 
 .volunteer-team {
@@ -2375,4 +2406,708 @@ footer p {
   footer::after {
     width: 65%;
   }
+}
+
+/* ---------------------------------------------------------------------------
+   Contribution kit: submission form, recovery lookup, public gallery
+   --------------------------------------------------------------------------- */
+
+.contribute-form {
+  display: grid;
+  gap: 1.4rem;
+  padding: clamp(1.2rem, 4vw, 2rem);
+  border: 1px solid var(--ink);
+  background: #fffaf1;
+}
+
+.contribute-form label,
+.contribute-form legend {
+  display: grid;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.contribute-kind {
+  padding: 0;
+  border: 0;
+}
+
+.contribute-form input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+.contribute-form textarea,
+.contribute-form select {
+  width: 100%;
+  padding: 0.7rem;
+  border: 1px solid var(--line);
+  background: white;
+  font: inherit;
+}
+
+.contribute-kind-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+  margin-top: 0.5rem;
+}
+
+@media (max-width: 560px) {
+  .contribute-kind-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.contribute-kind-card {
+  display: grid;
+  gap: 0.2rem;
+  padding: 1rem;
+  border: 2px solid var(--line);
+  background: white;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.contribute-kind-card:hover {
+  border-color: var(--ink);
+}
+
+.contribute-kind-card.selected {
+  border-color: var(--red);
+  background: var(--red-soft);
+}
+
+.contribute-kind-card input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.contribute-kind-card strong {
+  font-size: 0.95rem;
+}
+
+.contribute-kind-card small {
+  font-weight: 400;
+  color: var(--ink-soft);
+}
+
+.contribute-kind-card:focus-within {
+  outline: 3px solid var(--sun);
+  outline-offset: 2px;
+}
+
+.contribute-terms {
+  padding: 1rem 1.2rem;
+  border-left: 4px solid var(--sun);
+  background: var(--paper-deep);
+}
+
+.contribute-terms h3 {
+  margin: 0 0 0.5rem;
+  font-family: "Inter", "Noto Sans Devanagari", sans-serif;
+  font-size: 0.95rem;
+}
+
+.contribute-terms ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.contribute-dropzone {
+  display: grid;
+  gap: 0.7rem;
+  justify-items: center;
+  padding: 1.6rem 1rem;
+  border: 2px dashed var(--line);
+  background: white;
+  text-align: center;
+}
+
+.contribute-dropzone.dragging {
+  border-color: var(--red);
+  background: var(--red-soft);
+}
+
+.contribute-dropzone.filled {
+  border-style: solid;
+}
+
+.contribute-dropzone small {
+  color: var(--ink-soft);
+}
+
+.contribute-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  justify-content: center;
+  text-align: left;
+}
+
+.contribute-preview img {
+  max-width: 180px;
+  height: auto;
+  border: 1px solid var(--ink);
+}
+
+.contribute-preview p {
+  margin: 0 0 0.3rem;
+  font-size: 0.85rem;
+  word-break: break-all;
+}
+
+.contribute-browse {
+  font-size: 0.85rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.contribute-browse input[type="file"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.contribute-browse:focus-within span {
+  outline: 3px solid var(--sun);
+  outline-offset: 2px;
+}
+
+.contribute-privacy {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  font-size: 0.88rem;
+  background: var(--paper-deep);
+}
+
+/* Lightbox for posters and images: they have no page of their own, so the
+   full view and the details that would clutter every tile live here. */
+button.gallery-art {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+}
+
+.art-lightbox {
+  border: 0;
+  padding: 0;
+  background: none;
+  width: min(46rem, 94vw);
+}
+
+.art-lightbox::backdrop {
+  background: rgba(11, 11, 11, 0.72);
+}
+
+.art-lightbox-panel {
+  position: relative;
+  max-height: 88vh;
+  overflow-y: auto;
+  border: 1px solid var(--ink);
+  background: #fffaf1;
+  box-shadow: 10px 10px 0 rgba(11, 11, 11, 0.35);
+}
+
+.art-lightbox-panel img {
+  /* Capped so the detail block below is always on screen: the point of the
+     lightbox is the artwork *and* the terms that go with it. */
+  width: 100%;
+  max-height: 62vh;
+  height: auto;
+  object-fit: contain;
+  background: var(--paper-deep);
+}
+
+.art-lightbox-close {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  /* Meets the 44px touch target; it was 33×29 on a phone. */
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: rgba(255, 250, 241, 0.9);
+  font-size: 1.6rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.art-lightbox-close:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.art-lightbox-detail {
+  display: grid;
+  gap: 0.45rem;
+  border-top: 1px solid var(--line);
+  padding: 1rem 1.2rem 1.2rem;
+}
+
+.art-lightbox-detail h3 {
+  margin: 0;
+  font-size: 1.3rem;
+  text-transform: uppercase;
+}
+
+.art-lightbox-detail p {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.art-lightbox-licence {
+  color: var(--ink-soft);
+}
+
+.admin-unsaved {
+  margin-left: 0.5rem;
+  color: #765105;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Our contribution add form has the panel's only inline checkbox; without
+   this the .admin-shell label grid stacks the box above its own text. */
+.admin-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.admin-placeholder-note {
+  margin: 0.4rem 0 0;
+  color: #765105;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.contribute-receipt {
+  display: grid;
+  /* The receipt replaces the form beside a tall sidebar; without this the
+     stretched grid spaces its few rows across the whole height. */
+  align-content: start;
+  gap: 0.9rem;
+  padding: clamp(1.4rem, 5vw, 2.4rem);
+  border: 1px solid var(--ink);
+  background: #fffaf1;
+}
+
+.contribute-code-block {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  align-items: center;
+  padding: 1.2rem;
+  border: 2px solid var(--ink);
+  background: var(--sun);
+}
+
+.contribute-code-label {
+  width: 100%;
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.contribute-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: clamp(1.5rem, 6vw, 2.2rem);
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  word-break: break-all;
+}
+
+.contribute-warning {
+  margin: 0;
+  font-weight: 700;
+}
+
+/* Recovery code lookup */
+
+.lookup-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.lookup-form {
+  display: grid;
+  gap: 0.8rem;
+  padding: clamp(1.2rem, 4vw, 2rem);
+  border: 1px solid var(--ink);
+  background: #fffaf1;
+}
+
+.lookup-form label {
+  display: grid;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.lookup-code-input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 1.3rem;
+  letter-spacing: 0.25em;
+  text-align: center;
+  text-transform: uppercase;
+  padding: 0.6rem;
+  border: 1px solid var(--line);
+  background: white;
+}
+
+.lookup-result {
+  display: grid;
+  gap: 0.6rem;
+  justify-items: start;
+  padding: 1.2rem;
+  border: 1px solid var(--ink);
+  background: white;
+}
+
+/* Public gallery — the art is the interface: a masonry wall of work with
+   small captions, licence stated once above the wall rather than per card. */
+
+.gallery-toolbar {
+  border-top: 2px solid var(--ink);
+  padding-top: 1.1rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  margin-bottom: 1.4rem;
+}
+
+.gallery-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.gallery-filter {
+  padding: 0.45rem 1rem;
+  border: 1px solid var(--ink);
+  background: white;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.gallery-filter.active {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.gallery-licence {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
+
+.gallery-wall {
+  columns: 15rem;
+  column-gap: 1.1rem;
+}
+
+.gallery-card {
+  break-inside: avoid;
+  margin: 0 0 1.1rem;
+  background: white;
+  border: 1px solid var(--line);
+  box-shadow: 0 1px 5px rgba(11, 11, 11, 0.09);
+}
+
+.gallery-card img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.gallery-writing {
+  display: grid;
+  gap: 0.7rem;
+  padding: 1.6rem 1.3rem;
+  color: #fffaf1;
+}
+
+.gallery-writing h3 {
+  margin: 0;
+  font-size: 1.35rem;
+  line-height: 1.1;
+}
+
+.gallery-writing p {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.gallery-caption {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.7rem;
+  padding: 0.6rem 0.8rem;
+}
+
+.gallery-caption strong {
+  display: block;
+  font-size: 0.85rem;
+  line-height: 1.25;
+}
+
+.gallery-caption small {
+  color: var(--ink-soft);
+  font-size: 0.74rem;
+}
+
+.gallery-downloads {
+  display: flex;
+  gap: 0.6rem;
+  white-space: nowrap;
+}
+
+.gallery-downloads a {
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.gallery-empty {
+  padding: 2.5rem 1rem;
+  text-align: center;
+  border: 1px dashed var(--line);
+  color: var(--ink-soft);
+}
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.gallery-cta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  margin: 1.4rem 0 1.8rem;
+}
+
+.gallery-cta p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+}
+
+/* Category tags: glyph + label in the category colour, one per caption. */
+.gallery-caption .meta-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.28rem;
+}
+
+.gallery-caption .tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.32rem;
+  border: 1px solid var(--line);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.gallery-caption .tag svg {
+  width: 9px;
+  height: 9px;
+  margin-right: 0.26rem;
+}
+
+.tag-poster { color: var(--red); border-color: var(--red); }
+.tag-image { color: #0d47a1; border-color: #0d47a1; }
+.tag-poem { color: #3b1361; border-color: #3b1361; }
+.tag-essay { color: #176845; border-color: #176845; }
+
+.gallery-caption small a {
+  color: var(--ink);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Frames from print culture: a poster is pasted full-bleed in a hard frame,
+   an image sits matted like a photo print, an essay opens like a pamphlet. */
+.gallery-card[data-kind="poster"] { border: 2px solid var(--ink); }
+.gallery-card[data-kind="image"] .gallery-art { padding: 0.85rem; }
+.gallery-card[data-kind="image"] .gallery-art img { border: 1px solid var(--line); }
+.gallery-card[data-kind="essay"] .gallery-essay { border-top: 5px solid var(--ink); }
+
+.gallery-art img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.gallery-tile {
+  display: grid;
+  gap: 0.7rem;
+  padding: 1.7rem 1.4rem;
+  color: #fffaf1;
+}
+
+.gallery-tile h3 {
+  margin: 0;
+  font-size: 1.5rem;
+  line-height: 1.1;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.tile-sub {
+  margin: -0.35rem 0 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+.gallery-tile p {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.gallery-tile .tile-teaser {
+  display: -webkit-box;
+  -webkit-line-clamp: 14;
+  line-clamp: 14;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.tile-more {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.gallery-tile .tile-more {
+  color: #fffaf1;
+}
+
+.gallery-essay {
+  display: grid;
+  gap: 0.6rem;
+  padding: 1.7rem 1.4rem;
+}
+
+.gallery-essay h3 {
+  margin: 0;
+  font-size: 1.5rem;
+  line-height: 1.1;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.gallery-essay .tile-sub {
+  color: var(--ink-soft);
+}
+
+.gallery-essay .tile-teaser {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.gallery-essay .tile-more {
+  color: var(--red);
+}
+
+/* Read page for full poems and essays */
+.read-page {
+  max-width: 44rem;
+  margin-inline: auto;
+  display: grid;
+  gap: 1rem;
+}
+
+.read-credit {
+  margin: 0;
+  font-weight: 700;
+}
+
+.read-body {
+  white-space: pre-wrap;
+  font-size: 1.05rem;
+  line-height: 1.75;
+  padding: 1.6rem;
+  border: 1px solid var(--ink);
+  background: #fffaf1;
+}
+
+.read-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.8rem;
+  align-items: baseline;
+}
+
+.contribute-credit-field {
+  margin-top: 1rem;
+}
+
+.contribute-form > .button-primary {
+  justify-self: start;
+}
+
+/* The art page opens with the approved masthead: no boxed band, a huge
+   uppercase title, the call to action right under the dek. */
+.art-masthead {
+  padding-top: clamp(1rem, 3vw, 2rem);
+}
+
+.art-masthead h1 {
+  font-size: clamp(2.6rem, 7vw, 4.6rem);
+  line-height: 0.95;
+  margin: 0;
+  text-wrap: balance;
+  text-transform: uppercase;
+}
+
+.art-masthead .dek {
+  max-width: 34rem;
+  font-size: 1.02rem;
+  line-height: 1.55;
+  color: var(--ink-soft);
+  margin: 0.9rem 0 0;
 }

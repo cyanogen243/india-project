@@ -1,12 +1,11 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
-import { spawn, spawnSync } from "node:child_process";
 import { generateKeyPairSync, verify } from "node:crypto";
 import { readFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import net from "node:net";
 import { createClient } from "@libsql/client";
+import { startTestServer, stopTestServer } from "./helpers/server.mjs";
 
 let server;
 let baseUrl;
@@ -15,28 +14,6 @@ let testDbPath;
 const superAdminEmail = "owner@example.test";
 const superAdminPassword = "LocalReviewPassword!2026";
 
-async function getAvailablePort() {
-  return new Promise((resolve, reject) => {
-    const probe = net.createServer();
-    probe.unref();
-    probe.on("error", reject);
-    probe.listen(0, "127.0.0.1", () => {
-      const address = probe.address();
-      probe.close(() => resolve(address.port));
-    });
-  });
-}
-
-async function waitForServer(url) {
-  for (let attempt = 0; attempt < 60; attempt += 1) {
-    try {
-      const response = await fetch(url);
-      if (response.ok) return;
-    } catch {}
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  throw new Error("Next.js production server did not start");
-}
 
 before(async () => {
   testDbDir = await mkdtemp(path.join(tmpdir(), "tip-test-"));
@@ -52,28 +29,11 @@ before(async () => {
     RATE_LIMIT_SECRET: "test-rate-limit-secret-not-for-production",
     FEED_SIGNING_PRIVATE_KEY: privateKey.export({ format: "pem", type: "pkcs8" }).toString(),
   };
-  const bootstrap = spawnSync(
-    process.execPath,
-    ["node_modules/tsx/dist/cli.mjs", "scripts/bootstrap-admin.ts"],
-    { env: testEnv, encoding: "utf8" },
-  );
-  assert.equal(bootstrap.status, 0, bootstrap.stderr || bootstrap.stdout);
-  const port = await getAvailablePort();
-  baseUrl = `http://127.0.0.1:${port}`;
-  server = spawn(
-    process.execPath,
-    ["node_modules/next/dist/bin/next", "start", "-H", "127.0.0.1", "-p", String(port)],
-    { stdio: "ignore", env: testEnv },
-  );
-  await waitForServer(baseUrl);
+  ({ server, baseUrl } = await startTestServer(testEnv));
 });
 
 after(async () => {
-  if (server && server.exitCode === null) {
-    const exited = new Promise((resolve) => server.once("exit", resolve));
-    server.kill("SIGTERM");
-    await exited;
-  }
+  await stopTestServer(server);
   if (testDbDir) await rm(testDbDir, { recursive: true, force: true });
 });
 
