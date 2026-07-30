@@ -169,13 +169,10 @@ export async function processImage(input: Uint8Array): Promise<ProcessedImage> {
     throw new Error("Only PNG, JPEG and WebP images are accepted.");
   }
 
-  // Loaded here rather than at module scope. sharp is a native binding, and
-  // this module is also imported for its recovery-code helpers and its size
-  // constants by routes that never touch an image — including in the Sites
-  // build, which targets a Worker runtime with no native modules. A top-level
-  // import put sharp's loader into that bundle and took the whole worker down
-  // on import, so text contributions and every unrelated route failed too.
-  // Now only an actual image upload reaches it.
+  // Loaded here rather than at module scope. This module also carries the
+  // recovery-code helpers and the size limits, so routes that never touch an
+  // image import it too — and a top-level import would have every one of them
+  // load a native binding at cold start to use a constant.
   const sharp = (await import("sharp")).default;
 
   const source = sharp(Buffer.from(input), { failOn: "error", limitInputPixels: MAX_INPUT_PIXELS });
