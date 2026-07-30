@@ -195,24 +195,29 @@ export async function putProcessedImage(processed: ProcessedImage, written: stri
 }
 
 /**
- * Removes stored objects, skipping anything that is not a key.
+ * Removes stored objects, skipping anything that is not a key, and returns the
+ * keys it could not remove.
  *
- * Never throws. Every caller is either handling a failure already, or about to
- * erase the row that points at these objects — and in both cases a bucket
- * hiccup must not stop the work. Letting it throw meant a failed second delete
- * abandoned the update, leaving a row pointing at a pair that was already half
- * gone. A logged orphan is recoverable by hand; a contributor who cannot
- * withdraw is not.
+ * Never throws, so one failed delete cannot abandon the rest or the database
+ * write a caller is about to make. But it does not hide the failure either: a
+ * caller that is about to clear these keys from the row has to know, because
+ * once the row forgets a key nothing can find the object again. Erasure that
+ * reports success while the file is still stored is the worst of both.
  *
- * Takes the raw row values so callers do not each repeat the null check.
+ * Takes raw row values so callers do not each repeat the null check.
  */
-export async function discardStoredObjects(keys: unknown[]) {
+export async function discardStoredObjects(keys: unknown[]): Promise<string[]> {
+  const failed: string[] = [];
   for (const key of keys) {
     if (typeof key !== "string" || !key) continue;
-    await deleteObject(key).catch((error) => {
+    try {
+      await deleteObject(key);
+    } catch (error) {
       console.error("could not remove stored object", key, error);
-    });
+      failed.push(key);
+    }
   }
+  return failed;
 }
 
 export function contentTypeForKey(key: string) {

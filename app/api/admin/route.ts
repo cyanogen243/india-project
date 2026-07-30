@@ -19,7 +19,10 @@ import {
 import { hashPassword, verifyPassword } from "@/app/lib/password";
 import { editableCollections, validateCollectionParity, validateContentRecord } from "@/app/lib/content-validation";
 import { ensureDatabase, writeAuditEvent } from "@/app/lib/database";
-import { discardStoredObjects } from "@/app/lib/storage";
+import {
+  StoredObjectsNotReleased,
+  releaseStoredObjects,
+} from "@/app/lib/stored-objects";
 import { buildSignedFeedRelease } from "@/app/lib/feed";
 import type { Update } from "@/app/lib/content";
 
@@ -379,14 +382,16 @@ export async function POST(request: NextRequest) {
       // Withdrawal is terminal. Blocking only `approved` was not enough: a row
       // could be moved to `pending` first and approved from there, which put
       // work back on the wall that its author had taken down.
-      if (previous.status === "withdrawn" && input.status !== "withdrawn") {
-        return NextResponse.json(
+      const withdrawnRace = () =>
+        NextResponse.json(
           {
             error:
               "The contributor took this down. It cannot be republished without a fresh submission.",
           },
           { status: 409 },
         );
+      if (previous.status === "withdrawn" && input.status !== "withdrawn") {
+        return withdrawnRace();
       }
       if (input.status === "approved" && isFileKind && !previous.storage_key) {
         return NextResponse.json(
@@ -410,15 +415,30 @@ export async function POST(request: NextRequest) {
       // took the ordinary edit path, where the title and body come from the
       // request — so a decline could be followed by a decline that put the text
       // back.
+      // Every write below excludes a row that has since been withdrawn, and the
+      // result is checked. The guard above reads the status and the write comes
+      // later; a withdrawal arriving in that window would otherwise be undone
+      // by a decision made before it existed — republishing work its author had
+      // just taken down.
+      const guardWithdrawn = input.status === "withdrawn" ? "" : " AND status != 'withdrawn'";
+
       const terminal = input.status === "declined" || input.status === "withdrawn";
       if (terminal) {
-        await discardStoredObjects([previous.storage_key, previous.social_storage_key]);
-        await db.execute({
+        try {
+          await releaseStoredObjects([previous.storage_key, previous.social_storage_key]);
+        } catch (error) {
+          if (!(error instanceof StoredObjectsNotReleased)) throw error;
+          return NextResponse.json(
+            { error: "The stored files could not be removed, so nothing was changed. Try again." },
+            { status: 503 },
+          );
+        }
+        const erased = await db.execute({
           sql: `UPDATE contributions
                 SET status = ?, internal_notes = ?, decline_reason = ?, title = ?,
                     ${ERASED_CONTRIBUTION_COLUMNS},
                     reviewed_by = ?, reviewed_at = ?, updated_at = ?
-                WHERE id = ?`,
+                WHERE id = ?${guardWithdrawn}`,
           args: [
             input.status,
             input.internalNotes,
@@ -430,13 +450,14 @@ export async function POST(request: NextRequest) {
             input.id,
           ],
         });
+        if (erased.rowsAffected === 0) return withdrawnRace();
       } else {
-        await db.execute({
+        const edited = await db.execute({
           sql: `UPDATE contributions
                 SET status = ?, internal_notes = ?, decline_reason = ?,
                     title = ?, subtitle = ?, credit = ?, credit_account = ?, body = ?,
                     reviewed_by = ?, reviewed_at = ?, updated_at = ?
-                WHERE id = ?`,
+                WHERE id = ?${guardWithdrawn}`,
           args: [
             input.status,
             input.internalNotes,
@@ -452,6 +473,7 @@ export async function POST(request: NextRequest) {
             input.id,
           ],
         });
+        if (edited.rowsAffected === 0) return withdrawnRace();
       }
       await writeAuditEvent(user.id, "reviewed", "contribution", input.id, {
         status: input.status,
@@ -473,10 +495,18 @@ export async function POST(request: NextRequest) {
       });
       // Remove the stored files alongside the row. An orphaned object is a
       // poster the team believes it deleted and did not.
-      await discardStoredObjects([
-        existing.rows[0]?.storage_key,
-        existing.rows[0]?.social_storage_key,
-      ]);
+      try {
+        await releaseStoredObjects([
+          existing.rows[0]?.storage_key,
+          existing.rows[0]?.social_storage_key,
+        ]);
+      } catch (error) {
+        if (!(error instanceof StoredObjectsNotReleased)) throw error;
+        return NextResponse.json(
+          { error: "The stored files could not be removed, so nothing was deleted. Try again." },
+          { status: 503 },
+        );
+      }
       await db.execute({
         sql: "DELETE FROM contributions WHERE id = ?",
         args: [input.id],

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { consumeRateLimit, ensureDatabase, rateLimitExceeded, writeAuditEvent } from "@/app/lib/database";
 import {
   ESSAY_MAX_LENGTH,
+  MAX_REQUEST_BYTES,
   MAX_UPLOAD_BYTES,
   POEM_MAX_LENGTH,
   contentFingerprint,
@@ -176,6 +177,31 @@ export async function POST(request: NextRequest) {
     // referring page is the next best signal for which copy to send back.
     const requestLanguage = /\/hi(\/|$)/.test(request.headers.get("referer") ?? "") ? "hi" : "en";
     if (await rateLimitExceeded("contribution-submit", identifier, 5)) {
+      return NextResponse.json(
+        { error: say(requestLanguage, MESSAGES.rateLimited) },
+        { status: 429 },
+      );
+    }
+
+    // A declared length over the cap is refused before a byte is buffered. The
+    // file-size check further down runs after the whole multipart body has been
+    // read into memory, so on its own it invites exactly the request it exists
+    // to stop: send something enormous, have it parsed, have it rejected.
+    const declaredLength = Number(request.headers.get("content-length") ?? "");
+    if (Number.isFinite(declaredLength) && declaredLength > MAX_REQUEST_BYTES) {
+      return NextResponse.json(
+        { error: "Images must be 4 MB or smaller.", field: "file" },
+        { status: 413 },
+      );
+    }
+
+    // Spent on the attempt to parse, not on the outcome. Everything above is a
+    // header check; from here the server commits to reading and decoding a
+    // multipart body, and a request that is refused afterwards has still cost
+    // that work. Without this, oversized or malformed bodies could be repeated
+    // without limit, because they never reach the allowance the submit path
+    // spends on success.
+    if (!(await consumeRateLimit("contribution-parse", identifier, 60, 60 * 60 * 1000))) {
       return NextResponse.json(
         { error: say(requestLanguage, MESSAGES.rateLimited) },
         { status: 429 },

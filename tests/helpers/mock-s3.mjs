@@ -21,6 +21,7 @@ export async function startMockS3({ failOnKey = null } = {}) {
   /** @type {Map<string, { bytes: Buffer, contentType: string }>} */
   const objects = new Map();
   let failing = failOnKey;
+  let failingDeletes = null;
 
   const server = http.createServer((req, res) => {
     // Path-style addressing: /<bucket>/<key>. The driver sets forcePathStyle.
@@ -71,6 +72,14 @@ export async function startMockS3({ failOnKey = null } = {}) {
     }
 
     if (req.method === "DELETE") {
+      if (failingDeletes && failingDeletes(key)) {
+        res.writeHead(500, { "content-type": "application/xml" });
+        res.end(
+          `<?xml version="1.0" encoding="UTF-8"?><Error><Code>InternalError</Code>` +
+            `<Message>Injected delete failure for ${key}</Message></Error>`,
+        );
+        return;
+      }
       objects.delete(key);
       res.writeHead(204);
       res.end();
@@ -92,6 +101,10 @@ export async function startMockS3({ failOnKey = null } = {}) {
     /** Start refusing puts whose key matches, to test compensation. */
     failPutsWhere: (predicate) => {
       failing = predicate;
+    },
+    /** Start refusing deletes, to test that erasure is not reported as done. */
+    failDeletesWhere: (predicate) => {
+      failingDeletes = predicate;
     },
     close: () =>
       new Promise((resolve) => {

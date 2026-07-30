@@ -370,3 +370,66 @@ test("declining removes the files from the bucket", async () => {
   assert.equal(after.rows[0].social_storage_key, null);
   assert.equal(after.rows[0].decline_reason, "off_topic", "while the decision survives");
 });
+
+test("a decline that cannot remove the files changes nothing and says so", async () => {
+  // The row is the only thing that knows these keys. Clearing it after a failed
+  // delete leaves a file nothing can find, and tells the moderator the work was
+  // erased when it is still stored.
+  await resetRateLimits();
+  const sent = await submitPoster("S3 Undeletable Poster");
+  assert.equal(sent.status, 201, JSON.stringify(sent.body));
+  const { rows } = await db.execute({
+    sql: "SELECT id, storage_key, social_storage_key, title FROM contributions WHERE title = ?",
+    args: ["S3 Undeletable Poster"],
+  });
+  const row = rows[0];
+
+  const { cookie, csrfToken } = await adminSession();
+  s3.failDeletesWhere(() => true);
+  let response;
+  try {
+    response = await fetch(`${baseUrl}/api/admin`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie, "x-tip-csrf": csrfToken },
+      body: JSON.stringify({
+        action: "contribution_update",
+        id: String(row.id),
+        status: "declined",
+        declineReason: "off_topic",
+        internalNotes: "out of scope",
+      }),
+    });
+  } finally {
+    s3.failDeletesWhere(null);
+  }
+
+  assert.equal(response.status, 503, "the moderator is told it did not happen");
+
+  const after = await db.execute({
+    sql: "SELECT status, title, storage_key, social_storage_key FROM contributions WHERE id = ?",
+    args: [String(row.id)],
+  });
+  assert.equal(after.rows[0].status, "pending", "the row is untouched");
+  assert.equal(after.rows[0].title, row.title, "including its title");
+  assert.equal(
+    after.rows[0].storage_key,
+    row.storage_key,
+    "and it still points at the file that is still there",
+  );
+  assert.ok(s3.keys().includes(String(row.storage_key)), "which is indeed still there");
+
+  // And it succeeds once the bucket cooperates.
+  const retry = await fetch(`${baseUrl}/api/admin`, {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie, "x-tip-csrf": csrfToken },
+    body: JSON.stringify({
+      action: "contribution_update",
+      id: String(row.id),
+      status: "declined",
+      declineReason: "off_topic",
+      internalNotes: "out of scope",
+    }),
+  });
+  assert.equal(retry.status, 200, "a retry works");
+  assert.ok(!s3.keys().includes(String(row.storage_key)), "and the file is gone");
+});

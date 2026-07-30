@@ -1,5 +1,4 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import sharp from "sharp";
 
 /**
  * Recovery codes are the only way a contributor returns to a submission. They
@@ -46,6 +45,14 @@ export function recoveryCodeMatches(candidate: string, storedHash: string) {
 }
 
 export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
+
+/**
+ * Ceiling for the whole multipart body, checked against Content-Length before
+ * anything is buffered. Larger than the file cap because the body also carries
+ * the form fields and multipart framing, so a 4 MB image legitimately arrives
+ * as slightly more than 4 MB.
+ */
+export const MAX_REQUEST_BYTES = MAX_UPLOAD_BYTES + 512 * 1024;
 
 /**
  * Everything a contribution loses when it stops being publishable.
@@ -161,6 +168,15 @@ export async function processImage(input: Uint8Array): Promise<ProcessedImage> {
   if (!format) {
     throw new Error("Only PNG, JPEG and WebP images are accepted.");
   }
+
+  // Loaded here rather than at module scope. sharp is a native binding, and
+  // this module is also imported for its recovery-code helpers and its size
+  // constants by routes that never touch an image — including in the Sites
+  // build, which targets a Worker runtime with no native modules. A top-level
+  // import put sharp's loader into that bundle and took the whole worker down
+  // on import, so text contributions and every unrelated route failed too.
+  // Now only an actual image upload reaches it.
+  const sharp = (await import("sharp")).default;
 
   const source = sharp(Buffer.from(input), { failOn: "error", limitInputPixels: MAX_INPUT_PIXELS });
   const metadata = await source.metadata();

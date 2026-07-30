@@ -1510,3 +1510,63 @@ test("a withdrawn row cannot have its text written back either", async () => {
   assert.equal(rows[0].title, "(withdrawn)", "and the title stays a placeholder");
   assert.equal(rows[0].status, "withdrawn");
 });
+
+test("an oversized body is refused before it is read", async () => {
+  // The file-size check runs after the whole multipart body has been buffered,
+  // so on its own it invites the request it exists to stop. A declared length
+  // over the cap is refused from the header instead.
+  const oversized = Buffer.alloc(6 * 1024 * 1024, 0x41);
+  const form = humanTimings(new FormData());
+  form.set("kind", "poster");
+  form.set("title", "Test Oversized Body");
+  form.set("provenance", "own");
+  form.set("file", new Blob([oversized], { type: "image/png" }), "big.png");
+  const response = await fetch(`${baseUrl}/api/contributions`, {
+    method: "POST",
+    body: form,
+  });
+  assert.equal(response.status, 413, "refused as too large");
+
+  // 413 alone does not distinguish the header check from the file-size check
+  // further down, which produces the same status after buffering the whole
+  // body. The parse allowance does: it is spent immediately before parsing, so
+  // an untouched allowance is proof the body was never read.
+  const parseAllowance = await db.execute(
+    "SELECT count FROM rate_limits WHERE action = 'contribution-parse'",
+  );
+  assert.equal(
+    parseAllowance.rows.length,
+    0,
+    "the body was refused from its header, before anything was read",
+  );
+
+  const { rows } = await db.execute({
+    sql: "SELECT count(*) AS n FROM contributions WHERE title = ?",
+    args: ["Test Oversized Body"],
+  });
+  assert.equal(Number(rows[0].n), 0, "and nothing was stored");
+});
+
+test("parsing a body costs an allowance even when the body is refused", async () => {
+  // Without this an attacker repeats malformed or unparseable bodies without
+  // limit: they never reach the allowance the submit path spends on success,
+  // and every one of them is buffered and parsed first.
+  const send = (n) =>
+    submit({ kind: "poem", title: `Test Parse Allowance ${n}`, body: "" });
+
+  // A body that parses but fails validation — the case that used to be free.
+  const first = await send(0);
+  assert.equal(first.status, 400, "refused on its contents");
+
+  const consumed = await db.execute(
+    "SELECT count FROM rate_limits WHERE action = 'contribution-parse'",
+  );
+  assert.equal(consumed.rows.length, 1, "the attempt was counted");
+  assert.ok(Number(consumed.rows[0].count) >= 1);
+
+  let refusedAt = null;
+  for (let n = 1; n <= 70 && refusedAt === null; n += 1) {
+    if ((await send(n)).status === 429) refusedAt = n;
+  }
+  assert.ok(refusedAt !== null, "the parse allowance never ran out");
+});
