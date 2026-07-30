@@ -6,7 +6,7 @@ import {
   hashRecoveryCode,
   normalizeRecoveryCode,
 } from "@/app/lib/contributions";
-import { deleteObject } from "@/app/lib/storage";
+import { discardStoredObjects } from "@/app/lib/storage";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -77,9 +77,7 @@ export async function POST(request: NextRequest) {
       // Withdrawal is the contributor's decision and takes effect immediately.
       // The stored files go with it, otherwise a "removed" poster stays
       // downloadable to anyone still holding its URL.
-      for (const key of [row.storage_key, row.social_storage_key]) {
-        if (typeof key === "string" && key) await deleteObject(key);
-      }
+      await discardStoredObjects([row.storage_key, row.social_storage_key]);
       const now = new Date();
       // For a poem or an essay the body IS the work, so nulling the storage
       // keys erases nothing on its own. Someone who takes their writing down —

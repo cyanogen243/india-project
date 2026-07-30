@@ -19,7 +19,7 @@ import {
 import { hashPassword, verifyPassword } from "@/app/lib/password";
 import { editableCollections, validateCollectionParity, validateContentRecord } from "@/app/lib/content-validation";
 import { ensureDatabase, writeAuditEvent } from "@/app/lib/database";
-import { deleteObject } from "@/app/lib/storage";
+import { discardStoredObjects } from "@/app/lib/storage";
 import { buildSignedFeedRelease } from "@/app/lib/feed";
 import type { Update } from "@/app/lib/content";
 
@@ -412,9 +412,7 @@ export async function POST(request: NextRequest) {
       // back.
       const terminal = input.status === "declined" || input.status === "withdrawn";
       if (terminal) {
-        for (const key of [previous.storage_key, previous.social_storage_key]) {
-          if (typeof key === "string" && key) await deleteObject(key);
-        }
+        await discardStoredObjects([previous.storage_key, previous.social_storage_key]);
         await db.execute({
           sql: `UPDATE contributions
                 SET status = ?, internal_notes = ?, decline_reason = ?, title = ?,
@@ -475,12 +473,10 @@ export async function POST(request: NextRequest) {
       });
       // Remove the stored files alongside the row. An orphaned object is a
       // poster the team believes it deleted and did not.
-      for (const key of [
+      await discardStoredObjects([
         existing.rows[0]?.storage_key,
         existing.rows[0]?.social_storage_key,
-      ]) {
-        if (typeof key === "string" && key) await deleteObject(key);
-      }
+      ]);
       await db.execute({
         sql: "DELETE FROM contributions WHERE id = ?",
         args: [input.id],

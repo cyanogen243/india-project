@@ -195,14 +195,22 @@ export async function putProcessedImage(processed: ProcessedImage, written: stri
 }
 
 /**
- * Removes objects a request stored before it failed. Never throws: the caller
- * is already handling a failure, and losing the original error to a cleanup
- * error would hide why the request failed in the first place.
+ * Removes stored objects, skipping anything that is not a key.
+ *
+ * Never throws. Every caller is either handling a failure already, or about to
+ * erase the row that points at these objects — and in both cases a bucket
+ * hiccup must not stop the work. Letting it throw meant a failed second delete
+ * abandoned the update, leaving a row pointing at a pair that was already half
+ * gone. A logged orphan is recoverable by hand; a contributor who cannot
+ * withdraw is not.
+ *
+ * Takes the raw row values so callers do not each repeat the null check.
  */
-export async function discardStoredObjects(keys: string[]) {
+export async function discardStoredObjects(keys: unknown[]) {
   for (const key of keys) {
+    if (typeof key !== "string" || !key) continue;
     await deleteObject(key).catch((error) => {
-      console.error("orphaned contribution object", key, error);
+      console.error("could not remove stored object", key, error);
     });
   }
 }
