@@ -1195,13 +1195,9 @@ test("the public payload does not carry a submission timestamp", async () => {
 });
 
 test("a stored image is bounded, not just the upload", async () => {
-  // A 4 MB upload could re-encode to a ~76 MB lossless PNG and sit in the
-  // bucket at that size; the input cap alone did not bound what we store.
-  //
-  // The input has to be bigger than the cap for this to prove anything. An
-  // earlier version submitted a 1600px fixture and asserted "no larger than
-  // 3000" — true of the fixture before any resizing, so every output bound
-  // could have been deleted with the test still passing.
+  // A 4 MB upload can re-encode to a ~76 MB lossless PNG, so what is stored
+  // needs a bound of its own. The fixture has to exceed that bound for this to
+  // prove anything: one that already fits passes whether or not it holds.
   const oversized = await sharp({
     create: { width: 9000, height: 900, channels: 3, background: { r: 12, g: 60, b: 140 } },
   })
@@ -1218,9 +1214,7 @@ test("a stored image is bounded, not just the upload", async () => {
   );
   assert.equal(sent.status, 201);
   const row = await rowByTitle(title);
-  // PRINT_MAX_EDGE, exactly: the longest edge is resized down to it, and the
-  // short edge keeps the aspect ratio. Asserting the value rather than an
-  // inequality is what makes a raised or removed cap fail here.
+  // PRINT_MAX_EDGE exactly, not an inequality, so a raised cap fails here.
   assert.equal(Number(row.width), 5000, `longest edge is capped (${row.width}x${row.height})`);
   assert.equal(Number(row.height), 500, `aspect ratio is kept (${row.width}x${row.height})`);
   // MAX_STORED_BYTES, the backstop the route actually enforces.
@@ -1231,9 +1225,8 @@ test("a stored image is bounded, not just the upload", async () => {
 });
 
 test("an image that would decode to gigabytes is refused before it is decoded", async () => {
-  // A decompression bomb: a few kilobytes on the wire that expand past
-  // MAX_INPUT_PIXELS once decoded. The byte-size cap cannot catch this,
-  // because the file really is small. Nothing exercised that guard before.
+  // A decompression bomb: small on the wire, past MAX_INPUT_PIXELS once
+  // decoded, which is why the byte-size cap cannot catch it.
   const bomb = await sharp({
     create: { width: 8000, height: 7000, channels: 3, background: { r: 0, g: 0, b: 0 } },
   })

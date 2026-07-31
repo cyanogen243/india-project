@@ -87,27 +87,20 @@ production fallbacks when the corresponding `LIBSQL_*` values are absent.
 ### Identifying a visitor behind the proxies
 
 Production serves `theindiaproject.net` through **Cloudflare in front of
-Vercel** — visible in any response, which carries both a `cf-ray` and an
-`x-vercel-id`. This matters because every rate limit keys on who the caller is,
-and an address taken from a request header is only trustworthy if something in
-front overwrites it.
+Vercel** — every response carries both a `cf-ray` and an `x-vercel-id`. Rate
+limits key on who the caller is, so the application reads `CF-Connecting-IP`,
+which Cloudflare sets on every request, overwriting what the caller sent.
+There is nothing to configure.
 
-The application therefore reads `CF-Connecting-IP`, which Cloudflare sets on
-every request and overwrites whatever the caller sent. There is nothing to
-configure.
+`X-Forwarded-For` cannot serve here: Cloudflare appends to it and Vercel
+appends behind that, so its trailing entry is the Cloudflare edge — one
+identity shared by everyone routed through it — and its leading entry is the
+caller's to choose.
 
-`X-Forwarded-For` cannot do this job here. Cloudflare appends to it rather than
-replacing it, so a caller can put their own value in front, and Vercel then
-appends the edge address behind — leaving neither end reliably the visitor.
-Reading the trailing entry, which is right behind a single appending proxy,
-yields the Cloudflare edge on this deployment: everyone routed through one edge
-counts as one person, so five submissions an hour is five between all of them.
-
-This identity holds as long as requests arrive through Cloudflare, so a
-deployment should keep that the only public route in: on Vercel, do not leave a
-`*.vercel.app` alias publicly reachable; on a self-hosted origin, restrict the
-host to Cloudflare's published ranges. Both are standard hardening for any
-site served this way, and worth confirming when the deployment changes.
+Keep Cloudflare the only public route in, so that identity holds: on Vercel, do
+not leave a `*.vercel.app` alias publicly reachable; on a self-hosted origin,
+restrict the host to Cloudflare's published ranges. Both are standard hardening,
+and worth reconfirming whenever the deployment changes.
 
 Use a different high-entropy value for each secret. Rotate a session secret by
 replacing it and revoking sessions; rotate the rate-limit secret independently.

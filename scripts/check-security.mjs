@@ -29,17 +29,11 @@ const approvedForms = [
   "app/admin/AdminApp.tsx",
 ];
 
-// Uploads are allowed on exactly the two surfaces built to receive them. Both
-// re-encode every image server-side before storage — which is what strips the
-// author and GPS metadata that design tools and phone cameras embed — and
-// neither publishes anything without admin approval.
-//
-// This list is separate from `approvedForms`, and shorter, on purpose. The
-// upload ban used to cover every form and was dropped wholesale when the
-// contribution wall needed one exemption, which quietly made a file input on
-// volunteer intake a passing build — against a README that promises intake
-// "deliberately omits IDs, files". Widening this list is the reviewed act;
-// being on `approvedForms` is not enough.
+// Uploads are allowed only on the two surfaces built to receive them, both of
+// which re-encode every image server-side — stripping the author and GPS
+// metadata design tools and cameras embed — and publish nothing without
+// approval. Deliberately shorter than `approvedForms`: being an approved form
+// is not enough to accept files.
 const approvedUploadForms = [
   "app/components/ContributeForm.tsx",
   "app/admin/AdminApp.tsx",

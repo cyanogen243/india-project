@@ -39,16 +39,10 @@ const reasonLabels: Record<string, { en: string; hi: string }> = {
 export function RecoveryCodeLookup({ language }: { language: Language }) {
   const hindi = language === "hi";
   const [code, setCode] = useState("");
-  // A submission is held together with the code that fetched it, so the
-  // withdraw button acts on the card it sits in rather than on whatever the
-  // field happens to say when it is pressed. Withdrawal is irreversible: a
-  // contributor who looked up one code and then typed another — checking a
-  // second submission — was erasing the work they were not looking at, and
-  // being told it had worked under the title of the one they were.
-  //
-  // The field clears this on every keystroke, so the two cannot drift apart in
-  // the first place. Pairing them here as well means the button cannot target
-  // the wrong record even if that ever stops being true.
+  // A submission is held with the code that fetched it, so withdrawal — which
+  // is irreversible — acts on the card on screen rather than on whatever the
+  // field says when the button is pressed. Editing the field clears this, so
+  // the two cannot disagree; pairing them holds even if that ever changes.
   const [result, setResult] = useState<{ code: string; submission: Submission } | null>(null);
   const [state, setState] = useState<"idle" | "loading" | "error">("idle");
   const [message, setMessage] = useState("");
@@ -67,8 +61,7 @@ export function RecoveryCodeLookup({ language }: { language: Language }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ code: target, action }),
       });
-      // A proxy refusing the request answers in HTML, not JSON. Parsing
-      // unguarded showed the contributor a syntax error from the parser.
+      // A proxy refusing the request answers in HTML, not JSON.
       const value = await response.json().catch(() => null);
       if (!response.ok) {
         throw new Error(value?.error ?? (hindi ? "कुछ गड़बड़ हुई।" : "Something went wrong."));
@@ -110,10 +103,9 @@ export function RecoveryCodeLookup({ language }: { language: Language }) {
             value={code}
             onChange={(event) => {
               setCode(event.target.value.toUpperCase());
-              // The card below belongs to the code that fetched it. Once the
-              // field says something else the two no longer agree, and a
-              // result card carries a button that erases work for good — so
-              // it goes rather than waiting beside a code it does not match.
+              // The card belongs to the code that fetched it and carries a
+              // button that erases work for good, so it goes as soon as the
+              // field stops matching it.
               setResult(null);
               setMessage("");
             }}
