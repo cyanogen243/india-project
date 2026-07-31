@@ -84,6 +84,31 @@ The native Vercel Turso integration can be used without renaming its injected
 variables. `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` are accepted as
 production fallbacks when the corresponding `LIBSQL_*` values are absent.
 
+### Identifying a visitor behind the proxies
+
+Production serves `theindiaproject.net` through **Cloudflare in front of
+Vercel** — visible in any response, which carries both a `cf-ray` and an
+`x-vercel-id`. This matters because every rate limit keys on who the caller is,
+and an address taken from a request header is only trustworthy if something in
+front overwrites it.
+
+The application therefore reads `CF-Connecting-IP`, which Cloudflare sets on
+every request and overwrites whatever the caller sent. There is nothing to
+configure.
+
+`X-Forwarded-For` cannot do this job here. Cloudflare appends to it rather than
+replacing it, so a caller can put their own value in front, and Vercel then
+appends the edge address behind — leaving neither end reliably the visitor.
+Reading the trailing entry, which is right behind a single appending proxy,
+yields the Cloudflare edge on this deployment: everyone routed through one edge
+counts as one person, so five submissions an hour is five between all of them.
+
+This identity holds as long as requests arrive through Cloudflare, so a
+deployment should keep that the only public route in: on Vercel, do not leave a
+`*.vercel.app` alias publicly reachable; on a self-hosted origin, restrict the
+host to Cloudflare's published ranges. Both are standard hardening for any
+site served this way, and worth confirming when the deployment changes.
+
 Use a different high-entropy value for each secret. Rotate a session secret by
 replacing it and revoking sessions; rotate the rate-limit secret independently.
 Changing the Ed25519 feed key changes the public verification identity, so
@@ -159,6 +184,10 @@ Two commands support the contribution wall:
 
 - `npm run seed:art` loads the opening collection. Run once per database, with
   the object-storage variables set.
+- `npm run check:storage` proves a bucket before a deploy trusts it: it writes,
+  reads back, deletes, and confirms the object is gone. The automated tests
+  exercise the storage driver against an in-memory stand-in, so this is the
+  only check that exercises real credentials, region and signing.
 
 ## Validation
 
