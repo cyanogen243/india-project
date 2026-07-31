@@ -179,4 +179,9 @@ npm run build          # standard Next.js / Vercel
 npm run build:sites    # OpenAI Sites / vinext
 ```
 
+On Vercel, a Production build first checks object-storage put/get/delete,
+applies the additive database schema, and idempotently seeds the opening art
+collection. Preview and local builds skip that production preparation so they
+cannot mutate the live Turso database.
+
 No deployment or push is part of the local review workflow.

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminSession } from "@/app/lib/auth";
 import { ensureDatabase } from "@/app/lib/database";
-import { contentTypeForKey, getObject } from "@/app/lib/storage";
+import { contentTypeForKey, streamObject } from "@/app/lib/storage";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -43,14 +43,14 @@ export async function GET(
     return new NextResponse("Not found", { status: 404 });
   }
 
-  const object = await getObject(key);
+  const object = await streamObject(key);
   if (!object) return new NextResponse("Not found", { status: 404 });
 
   const safeTitle =
     String(row.title).replace(/[^a-zA-Z0-9 _-]/g, "").trim().slice(0, 60) || "poster";
-  const extension = key.endsWith(".png") ? "png" : "jpg";
+  const extension = key.endsWith(".png") ? "png" : key.endsWith(".webp") ? "webp" : "jpg";
 
-  return new NextResponse(Buffer.from(object.bytes), {
+  return new NextResponse(object.stream, {
     headers: {
       // Set from the key we generated, never echoed from the upload. The file
       // was re-encoded by us, so this type is known rather than claimed.

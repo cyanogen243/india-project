@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "npm run db:setup && next dev",
-    "build": "node scripts/validate-content.mjs && node scripts/build-feed.mjs && node scripts/check-security.mjs && next build",
+    "build": "node scripts/vercel-prepare.mjs && node scripts/validate-content.mjs && node scripts/build-feed.mjs && node scripts/check-security.mjs && next build",
     "start": "next start",
     "dev:sites": "vinext dev",
     "build:sites": "node scripts/validate-content.mjs && node scripts/build-feed.mjs && node scripts/check-security.mjs && vinext build",
@@ -22,7 +22,7 @@
     "db:generate": "drizzle-kit generate",
     "admin:bootstrap": "tsx scripts/bootstrap-admin.ts",
     "typecheck": "tsc --noEmit",
-    "test": "npm run test:unit && npm run build && node --test tests/vercel-rendered-html.test.mjs tests/contribution-lifecycle.test.mjs tests/storage-driver.test.mjs",
+    "test": "npm run test:unit && npm run build && node --test tests/vercel-rendered-html.test.mjs tests/contribution-lifecycle.test.mjs tests/storage-driver.test.mjs tests/vercel-prepare.test.mjs",
     "test:unit": "tsx --test tests/volunteer-filter.test.ts",
     "test:sites": "npm run build:sites && node --test tests/rendered-html.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern .output --ignore-pattern .astro --ignore-pattern .netlify --ignore-pattern dist-demo --ignore-pattern test-results",
@@ -60,7 +60,7 @@
     "wrangler": "4.92.0"
   },
   "overrides": {
-    "postcss": "8.5.14",
+    "postcss": "8.5.25",
     "sharp": "0.35.0",
     "ws": "8.21.1"
   },
