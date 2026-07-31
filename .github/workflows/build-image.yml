@@ -1,9 +1,9 @@
-name: deploy
+name: build-image
 
-# The delivery pipeline (docs: india-project-infra/docs/ci-cd.md):
-#   push → build sha-tagged images → auto-deploy staging
-#   main only → semantic-release mints vX.Y.Z and aliases the same images
-# Production is NEVER deployed from here — see promote-production.yml.
+# Artifact production only — this repo knows nothing about deployment.
+#   every push: build container image variants, push to GHCR (sha-tagged)
+#   main only: semantic-release mints vX.Y.Z and aliases the same images
+# Where and when these images RUN is decided elsewhere (private infra repo).
 
 on:
   push:
@@ -39,7 +39,6 @@ jobs:
           build-args: |
             NEXT_PUBLIC_SITE_URL=http://localhost:3000
           tags: |
-            ghcr.io/${{ github.repository }}:staging
             ghcr.io/${{ github.repository }}:staging-${{ steps.vars.outputs.shortsha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -53,23 +52,6 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository }}:prod-${{ steps.vars.outputs.shortsha }}
           cache-from: type=gha
-
-  deploy-staging:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          repository: cyanogen243/india-project-infra
-          ssh-key: ${{ secrets.INFRA_DEPLOY_KEY }}
-      - name: Bump staging image tag (Flux rolls it out)
-        run: |
-          sed -i "s|tag: .*|tag: staging-${{ needs.build.outputs.shortsha }}|" \
-            clusters/india-project-staging/apps/india-project/helmrelease.yaml
-          git config user.name cyanogen243
-          git config user.email 309939834+cyanogen243@users.noreply.github.com
-          git commit -am "deploy(staging): ${{ needs.build.outputs.shortsha }}" || exit 0
-          git push
 
   release:
     if: github.ref == 'refs/heads/main'
