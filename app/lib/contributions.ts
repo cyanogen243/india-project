@@ -55,19 +55,12 @@ export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
 export const MAX_REQUEST_BYTES = MAX_UPLOAD_BYTES + 512 * 1024;
 
 /**
- * Everything a contribution loses when it stops being publishable.
+ * Everything a contribution loses when it stops being publishable — shared by
+ * withdrawal and declining so the two cannot disagree about what erasing means.
  *
- * Set by both paths that end a submission — a contributor withdrawing their
- * work, and a moderator declining it — so the two cannot disagree about what
- * erasing means.
- *
- * The row survives: a recovery code still reports the outcome, and the decision
- * stays auditable. What it keeps is the decision — status, reason, reviewer.
- * What it loses is the work.
- *
- * The title is the caller's, since "(withdrawn)" and "(declined)" are different
- * facts. So is `internal_notes`: a decline arrives with the moderator's note in
- * the same request.
+ * The row survives with the decision on it: status, reason, reviewer. The title
+ * and `internal_notes` are the caller's, since "(withdrawn)" and "(declined)"
+ * differ and a decline carries its note in the same request.
  */
 export const ERASED_CONTRIBUTION_COLUMNS = `storage_key = NULL, social_storage_key = NULL,
   body = '', subtitle = '', credit = '', credit_account = '', source_url = '',

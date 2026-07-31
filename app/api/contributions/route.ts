@@ -129,11 +129,8 @@ function validationResponse(error: z.ZodError, language: string) {
 
 function remoteIdentifier(request: NextRequest) {
   // Only headers the hosting platform sets and overwrites can be trusted.
-  // CF-Connecting-IP was previously consulted first and taken from the inbound
-  // request with no proof the request came through Cloudflare — on this
-  // deployment anyone could send it and pick their own bucket, which voided
-  // both the upload limit and the lookup limit that protects recovery codes.
-  // It is used only when the platform is actually Cloudflare.
+  // Anyone can send CF-Connecting-IP, so it counts only where the platform is
+  // actually Cloudflare — otherwise a caller picks their own rate-limit bucket.
   const behindCloudflare = process.env.ART_TRUSTED_PROXY === "cloudflare";
   if (behindCloudflare) {
     const edge = request.headers.get("cf-connecting-ip");
@@ -183,10 +180,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // A declared length over the cap is refused before a byte is buffered. The
-    // file-size check further down runs after the whole multipart body has been
-    // read into memory, so on its own it invites exactly the request it exists
-    // to stop: send something enormous, have it parsed, have it rejected.
+    // Refused before a byte is buffered. The file-size check further down runs
+    // only after the whole multipart body is in memory.
     const declaredLength = Number(request.headers.get("content-length") ?? "");
     if (Number.isFinite(declaredLength) && declaredLength > MAX_REQUEST_BYTES) {
       return NextResponse.json(
@@ -195,12 +190,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Spent on the attempt to parse, not on the outcome. Everything above is a
-    // header check; from here the server commits to reading and decoding a
-    // multipart body, and a request that is refused afterwards has still cost
-    // that work. Without this, oversized or malformed bodies could be repeated
-    // without limit, because they never reach the allowance the submit path
-    // spends on success.
+    // Spent on the attempt, not the outcome: from here the server commits to
+    // reading and decoding a multipart body, and a body refused afterwards has
+    // still cost that. The submit allowance below is only spent on success.
     if (!(await consumeRateLimit("contribution-parse", identifier, 60, 60 * 60 * 1000))) {
       return NextResponse.json(
         { error: say(requestLanguage, MESSAGES.rateLimited) },

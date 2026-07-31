@@ -379,9 +379,8 @@ export async function POST(request: NextRequest) {
       // permanently
       // broken card on the wall and republish work its contributor took down.
       const isFileKind = previous.kind === "poster" || previous.kind === "image";
-      // Withdrawal is terminal. Blocking only `approved` was not enough: a row
-      // could be moved to `pending` first and approved from there, which put
-      // work back on the wall that its author had taken down.
+      // Withdrawal is terminal, for any target status: allowing `pending` would
+      // let a row be moved there and approved from there.
       const withdrawnRace = () =>
         NextResponse.json(
           {
@@ -405,21 +404,15 @@ export async function POST(request: NextRequest) {
 
       const now = new Date();
 
-      // Declining erases the work the way withdrawal does: a decline that only
-      // changed a status left the poem that named someone, and both of a
-      // poster's files, in place. The row keeps the decision — status, reason,
-      // reviewer — and loses the submission.
+      // Declining erases the work, as withdrawal does. The row keeps the
+      // decision — status, reason, reviewer — and loses the submission.
       //
-      // Keyed on the status being written, not on the transition into it. Keying
-      // on the transition meant a second request against an already-terminal row
-      // took the ordinary edit path, where the title and body come from the
-      // request — so a decline could be followed by a decline that put the text
-      // back.
-      // Every write below excludes a row that has since been withdrawn, and the
-      // result is checked. The guard above reads the status and the write comes
-      // later; a withdrawal arriving in that window would otherwise be undone
-      // by a decision made before it existed — republishing work its author had
-      // just taken down.
+      // Keyed on the status being written rather than the transition into it,
+      // so a second request against an already-terminal row cannot take the
+      // ordinary edit path and write the title and body back.
+      // The guard above reads the status; the write happens later. Excluding a
+      // withdrawn row in the write itself, and checking that it matched, is what
+      // stops a withdrawal arriving in between from being overwritten.
       const guardWithdrawn = input.status === "withdrawn" ? "" : " AND status != 'withdrawn'";
 
       const terminal = input.status === "declined" || input.status === "withdrawn";

@@ -500,14 +500,8 @@ export async function consumeRateLimit(
   const nowIso = new Date(now).toISOString();
   const expiresIso = new Date(now + windowMs).toISOString();
 
-  // Every decision below is made inside a single statement's WHERE clause, so
-  // the check and the increment cannot be separated. Reading the count and
-  // then updating it — the obvious shape — let concurrent requests all read
-  // the same under-limit count and all pass: a hundred at once against a
-  // limit of ten were a hundred accepted. That is the difference between a
-  // rate limit and a suggestion, and it mattered most on recovery-code lookup,
-  // where the limit is the only thing standing between a guessable code and an
-  // irreversible withdrawal.
+  // Each decision happens inside one statement's WHERE clause, so the check and
+  // the increment cannot be separated by a concurrent request.
 
   // 1. A live window with room left: take a slot.
   const takeSlot = {

@@ -21,11 +21,8 @@ const lookupSchema = z.object({
 
 function remoteIdentifier(request: NextRequest) {
   // Only headers the hosting platform sets and overwrites can be trusted.
-  // CF-Connecting-IP was previously consulted first and taken from the inbound
-  // request with no proof the request came through Cloudflare — on this
-  // deployment anyone could send it and pick their own bucket, which voided
-  // both the upload limit and the lookup limit that protects recovery codes.
-  // It is used only when the platform is actually Cloudflare.
+  // Anyone can send CF-Connecting-IP, so it counts only where the platform is
+  // actually Cloudflare — otherwise a caller picks their own rate-limit bucket.
   const behindCloudflare = process.env.ART_TRUSTED_PROXY === "cloudflare";
   if (behindCloudflare) {
     const edge = request.headers.get("cf-connecting-ip");

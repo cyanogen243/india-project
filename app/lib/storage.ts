@@ -174,18 +174,10 @@ export async function deleteObject(key: string) {
 }
 
 /**
- * Stores both variants of a processed image, recording each key in `written`
- * *before* its write is attempted.
- *
- * The ordering is the point, and it is easy to get backwards. Recording a key
- * only once its put has returned looks safer and is the opposite: a failure on
- * the second write leaves the first object in the bucket while the list the
- * cleanup path reads is still empty. Naming a key that was never written costs
- * a no-op delete; missing one leaves a file no row points at, and every path
- * that deletes an object starts from a row.
- *
- * Three callers store images — the public form, admin curation, and the seed
- * script — so the rule lives here rather than being restated three times.
+ * Stores both variants, recording each key in `written` before its write is
+ * attempted, so a failure part-way still has both keys to clean up. Deleting a
+ * key that was never written is a no-op; missing one leaves a file no row
+ * points at.
  */
 export async function putProcessedImage(processed: ProcessedImage, written: string[]) {
   written.push(processed.printKey);
@@ -195,15 +187,9 @@ export async function putProcessedImage(processed: ProcessedImage, written: stri
 }
 
 /**
- * Removes stored objects, skipping anything that is not a key, and returns the
- * keys it could not remove.
- *
- * Never throws, so one failed delete cannot abandon the rest or the database
- * write a caller is about to make. But it does not hide the failure either: a
- * caller that is about to clear these keys from the row has to know, because
- * once the row forgets a key nothing can find the object again. Erasure that
- * reports success while the file is still stored is the worst of both.
- *
+ * Removes stored objects and returns the keys it could not remove. Never throws
+ * — one failed delete must not abandon the rest — but does not hide the failure
+ * either, since a caller about to clear these keys from the row needs to know.
  * Takes raw row values so callers do not each repeat the null check.
  */
 export async function discardStoredObjects(keys: unknown[]): Promise<string[]> {
