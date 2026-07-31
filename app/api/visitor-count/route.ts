@@ -3,16 +3,9 @@ import {
   ensureDatabase,
   hashNetworkIdentifier,
 } from "@/app/lib/database";
+import { remoteIdentifier } from "@/app/lib/request-identity";
 
 export const dynamic = "force-dynamic";
-
-function remoteIdentifier(request: NextRequest) {
-  return (
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    request.headers.get("cf-connecting-ip") ||
-    "unknown"
-  );
-}
 
 function response(total: number, status = 200) {
   return NextResponse.json(

@@ -13,6 +13,7 @@ import {
   processImage,
 } from "@/app/lib/contributions";
 import { discardStoredObjects, putProcessedImage } from "@/app/lib/storage";
+import { remoteIdentifier } from "@/app/lib/request-identity";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -126,29 +127,6 @@ function validationResponse(error: z.ZodError, language: string) {
   );
 }
 
-
-function remoteIdentifier(request: NextRequest) {
-  // Only headers the hosting platform sets and overwrites can be trusted.
-  // CF-Connecting-IP was previously consulted first and taken from the inbound
-  // request with no proof the request came through Cloudflare — on this
-  // deployment anyone could send it and pick their own bucket, which voided
-  // both the upload limit and the lookup limit that protects recovery codes.
-  // It is used only when the platform is actually Cloudflare.
-  const behindCloudflare = process.env.ART_TRUSTED_PROXY === "cloudflare";
-  if (behindCloudflare) {
-    const edge = request.headers.get("cf-connecting-ip");
-    if (edge) return edge;
-  }
-  // Otherwise take the LAST X-Forwarded-For element: a proxy appends the peer
-  // it actually saw, so trailing entries are the platform's, while anything a
-  // caller prepends sits at the front.
-  const forwarded = request.headers
-    .get("x-forwarded-for")
-    ?.split(",")
-    .map((part) => part.trim())
-    .filter(Boolean);
-  return forwarded?.[forwarded.length - 1] || "unknown";
-}
 
 // SQLite stores text up to the first NUL byte, so a value that passes
 // validation can land in the row truncated — short enough to slip under the

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { consumeRateLimit, ensureDatabase, writeAuditEvent } from "@/app/lib/database";
 import { volunteerCapabilities } from "@/app/lib/volunteers";
+import { remoteIdentifier } from "@/app/lib/request-identity";
 
 export const dynamic = "force-dynamic";
 
@@ -42,14 +43,6 @@ function validationResponse(error: z.ZodError) {
       ...(field in messages ? { field } : {}),
     },
     { status: 400 },
-  );
-}
-
-function remoteIdentifier(request: NextRequest) {
-  return (
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    request.headers.get("cf-connecting-ip") ||
-    "unknown"
   );
 }
 
