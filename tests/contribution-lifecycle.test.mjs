@@ -6,6 +6,7 @@ import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createClient } from "@libsql/client";
+import sharp from "sharp";
 import { NO_BUCKET_ENV, startTestServer, stopTestServer } from "./helpers/server.mjs";
 
 /**
@@ -1196,14 +1197,58 @@ test("the public payload does not carry a submission timestamp", async () => {
 test("a stored image is bounded, not just the upload", async () => {
   // A 4 MB upload could re-encode to a ~76 MB lossless PNG and sit in the
   // bucket at that size; the input cap alone did not bound what we store.
-  const bytes = await readFile("content/seed-art/image-breaking-the-salt-law.jpg");
+  //
+  // The input has to be bigger than the cap for this to prove anything. An
+  // earlier version submitted a 1600px fixture and asserted "no larger than
+  // 3000" — true of the fixture before any resizing, so every output bound
+  // could have been deleted with the test still passing.
+  const oversized = await sharp({
+    create: { width: 9000, height: 900, channels: 3, background: { r: 12, g: 60, b: 140 } },
+  })
+    .png()
+    .toBuffer();
+  assert.ok(
+    oversized.byteLength < 4 * 1024 * 1024,
+    "the fixture has to fit through the upload cap to reach the resize",
+  );
   const title = "Test Stored Size";
-  const sent = await submit({ kind: "image", title }, { bytes, type: "image/jpeg", name: "p.jpg" });
+  const sent = await submit(
+    { kind: "image", title },
+    { bytes: oversized, type: "image/png", name: "wide.png" },
+  );
   assert.equal(sent.status, 201);
   const row = await rowByTitle(title);
-  assert.ok(Number(row.byte_size) < 12 * 1024 * 1024, `stored print is bounded (${row.byte_size})`);
-  assert.ok(Number(row.width) <= 3000 && Number(row.height) <= 3000,
-    `stored dimensions are bounded (${row.width}x${row.height})`);
+  // PRINT_MAX_EDGE, exactly: the longest edge is resized down to it, and the
+  // short edge keeps the aspect ratio. Asserting the value rather than an
+  // inequality is what makes a raised or removed cap fail here.
+  assert.equal(Number(row.width), 5000, `longest edge is capped (${row.width}x${row.height})`);
+  assert.equal(Number(row.height), 500, `aspect ratio is kept (${row.width}x${row.height})`);
+  // MAX_STORED_BYTES, the backstop the route actually enforces.
+  assert.ok(
+    Number(row.byte_size) < 25 * 1024 * 1024,
+    `stored print is bounded (${row.byte_size})`,
+  );
+});
+
+test("an image that would decode to gigabytes is refused before it is decoded", async () => {
+  // A decompression bomb: a few kilobytes on the wire that expand past
+  // MAX_INPUT_PIXELS once decoded. The byte-size cap cannot catch this,
+  // because the file really is small. Nothing exercised that guard before.
+  const bomb = await sharp({
+    create: { width: 8000, height: 7000, channels: 3, background: { r: 0, g: 0, b: 0 } },
+  })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+  assert.ok(
+    bomb.byteLength < 4 * 1024 * 1024,
+    "the bomb has to pass the size cap, or it proves nothing about the pixel cap",
+  );
+  const sent = await submit(
+    { kind: "image", title: "Test Decompression Bomb" },
+    { bytes: bomb, type: "image/png", name: "bomb.png" },
+  );
+  assert.equal(sent.status, 400, "56 megapixels is past the decode ceiling");
+  assert.equal(await rowByTitle("Test Decompression Bomb"), undefined, "nothing was stored");
 });
 
 test("curation holds to the same credit rules as the public form", async () => {
