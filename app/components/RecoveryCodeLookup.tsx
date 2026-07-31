@@ -39,12 +39,16 @@ const reasonLabels: Record<string, { en: string; hi: string }> = {
 export function RecoveryCodeLookup({ language }: { language: Language }) {
   const hindi = language === "hi";
   const [code, setCode] = useState("");
-  // The code that fetched a submission is kept with it rather than read back
-  // from the input when the withdraw button is pressed. Withdrawal is
-  // irreversible and the input stays editable, so a contributor who looked up
-  // one code and then typed another — checking a second submission — would
-  // otherwise erase the submission they were not looking at, under the title
-  // of the one they were.
+  // A submission is held together with the code that fetched it, so the
+  // withdraw button acts on the card it sits in rather than on whatever the
+  // field happens to say when it is pressed. Withdrawal is irreversible: a
+  // contributor who looked up one code and then typed another — checking a
+  // second submission — was erasing the work they were not looking at, and
+  // being told it had worked under the title of the one they were.
+  //
+  // The field clears this on every keystroke, so the two cannot drift apart in
+  // the first place. Pairing them here as well means the button cannot target
+  // the wrong record even if that ever stops being true.
   const [result, setResult] = useState<{ code: string; submission: Submission } | null>(null);
   const [state, setState] = useState<"idle" | "loading" | "error">("idle");
   const [message, setMessage] = useState("");
@@ -104,7 +108,15 @@ export function RecoveryCodeLookup({ language }: { language: Language }) {
           <input
             className="lookup-code-input"
             value={code}
-            onChange={(event) => setCode(event.target.value.toUpperCase())}
+            onChange={(event) => {
+              setCode(event.target.value.toUpperCase());
+              // The card below belongs to the code that fetched it. Once the
+              // field says something else the two no longer agree, and a
+              // result card carries a button that erases work for good — so
+              // it goes rather than waiting beside a code it does not match.
+              setResult(null);
+              setMessage("");
+            }}
             placeholder="A7X9B2MZ"
             maxLength={16}
             required
