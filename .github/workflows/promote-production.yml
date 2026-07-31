@@ -1,13 +1,14 @@
 name: promote-production
 
-# Manual, on-demand production deploys. Promotes an image that CI already
-# built and staging already ran — never builds anything new.
+# The ONLY path to production. Manual, on-demand: promotes an image tag that
+# CI already built (a release like v1.2.0, or a prod-<sha> for emergencies) —
+# never builds anything new.
 on:
   workflow_dispatch:
     inputs:
-      shortsha:
-        description: "7-char app commit sha to promote (blank = HEAD of the branch you run this from)"
-        required: false
+      tag:
+        description: "Image tag to promote — a release version (v1.2.0) or prod-<sha>"
+        required: true
 
 permissions:
   contents: read
@@ -17,26 +18,22 @@ jobs:
   promote:
     runs-on: ubuntu-latest
     steps:
-      - id: vars
-        run: |
-          SHA='${{ github.event.inputs.shortsha }}'
-          echo "shortsha=${SHA:-${GITHUB_SHA::7}}" >> "$GITHUB_OUTPUT"
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Refuse to promote an image that does not exist
-        run: docker manifest inspect ghcr.io/${{ github.repository }}:prod-${{ steps.vars.outputs.shortsha }} > /dev/null
+        run: docker manifest inspect "ghcr.io/${{ github.repository }}:${{ github.event.inputs.tag }}" > /dev/null
       - uses: actions/checkout@v4
         with:
           repository: cyanogen243/india-project-infra
           ssh-key: ${{ secrets.INFRA_DEPLOY_KEY }}
       - name: Bump production image tag (Flux rolls it out)
         run: |
-          sed -i "s|tag: .*|tag: prod-${{ steps.vars.outputs.shortsha }}|" \
+          sed -i "s|tag: .*|tag: ${{ github.event.inputs.tag }}|" \
             clusters/india-project-prod/apps/india-project/helmrelease.yaml
           git config user.name cyanogen243
           git config user.email 309939834+cyanogen243@users.noreply.github.com
-          git commit -am "deploy(prod): ${{ steps.vars.outputs.shortsha }}" || exit 0
+          git commit -am "deploy(prod): ${{ github.event.inputs.tag }}" || exit 0
           git push
