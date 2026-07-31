@@ -12,9 +12,9 @@ function request(headers: Record<string, string>) {
 }
 
 test("the Cloudflare header identifies the visitor, not the edge in front of us", () => {
-  // What production actually sends: Cloudflare names the visitor, and by the
-  // time Vercel has appended the peer it saw, the last X-Forwarded-For entry
-  // is the Cloudflare edge — the same value for everyone routed through it.
+  // Headers as production sends them: Cloudflare names the visitor, and the
+  // trailing X-Forwarded-For entry is the edge — one value shared by everyone
+  // routed through it.
   const edge = "172.71.10.5";
   const first = remoteIdentifier(
     request({ "cf-connecting-ip": "49.36.180.1", "x-forwarded-for": `49.36.180.1, ${edge}` }),
@@ -34,9 +34,8 @@ test("one visitor stays one caller across requests", () => {
 });
 
 test("a caller cannot prepend their way out of their bucket", () => {
-  // Cloudflare appends to X-Forwarded-For rather than replacing it, so a
-  // caller can put anything in front. CF-Connecting-IP is overwritten, so it
-  // is the value that decides.
+  // Cloudflare appends to X-Forwarded-For, so a caller can put anything in
+  // front of it. CF-Connecting-IP is overwritten, so it decides.
   assert.equal(
     remoteIdentifier(
       request({
