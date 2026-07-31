@@ -21,13 +21,27 @@ for await (const path of glob(["app/**/*.{ts,tsx}", "content/**/*.json"], {
 }
 
 // Every form surface stays on this list so adding one remains a deliberate,
-// reviewed act. `ContributeForm` accepts image uploads: they are re-encoded
-// server-side before storage, which strips embedded author and location
-// metadata, and nothing reaches the public site without admin approval.
+// reviewed act.
 const approvedForms = [
   "app/components/VolunteerForm.tsx",
   "app/components/ContributeForm.tsx",
   "app/components/RecoveryCodeLookup.tsx",
+  "app/admin/AdminApp.tsx",
+];
+
+// Uploads are allowed on exactly the two surfaces built to receive them. Both
+// re-encode every image server-side before storage — which is what strips the
+// author and GPS metadata that design tools and phone cameras embed — and
+// neither publishes anything without admin approval.
+//
+// This list is separate from `approvedForms`, and shorter, on purpose. The
+// upload ban used to cover every form and was dropped wholesale when the
+// contribution wall needed one exemption, which quietly made a file input on
+// volunteer intake a passing build — against a README that promises intake
+// "deliberately omits IDs, files". Widening this list is the reviewed act;
+// being on `approvedForms` is not enough.
+const approvedUploadForms = [
+  "app/components/ContributeForm.tsx",
   "app/admin/AdminApp.tsx",
 ];
 
@@ -41,6 +55,12 @@ for (const path of paths) {
     const normalised = path.split("\\").join("/");
     if (!approvedForms.some((approved) => normalised.endsWith(approved))) {
       throw new Error(`${path}: unreviewed form surface`);
+    }
+    if (
+      /type=["']file["']/i.test(source) &&
+      !approvedUploadForms.some((approved) => normalised.endsWith(approved))
+    ) {
+      throw new Error(`${path}: file uploads remain forbidden on this form`);
     }
   }
 }
