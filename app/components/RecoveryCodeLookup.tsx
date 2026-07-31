@@ -39,26 +39,45 @@ const reasonLabels: Record<string, { en: string; hi: string }> = {
 export function RecoveryCodeLookup({ language }: { language: Language }) {
   const hindi = language === "hi";
   const [code, setCode] = useState("");
-  const [submission, setSubmission] = useState<Submission | null>(null);
+  // The code that fetched a submission is kept with it rather than read back
+  // from the input when the withdraw button is pressed. Withdrawal is
+  // irreversible and the input stays editable, so a contributor who looked up
+  // one code and then typed another — checking a second submission — would
+  // otherwise erase the submission they were not looking at, under the title
+  // of the one they were.
+  const [result, setResult] = useState<{ code: string; submission: Submission } | null>(null);
   const [state, setState] = useState<"idle" | "loading" | "error">("idle");
   const [message, setMessage] = useState("");
+  const submission = result?.submission ?? null;
 
   async function send(action: "status" | "withdraw") {
+    // Withdrawal acts on the submission on screen; a status check acts on
+    // whatever has been typed.
+    const target = action === "withdraw" ? result?.code : code;
+    if (!target) return;
     setState("loading");
     setMessage("");
     try {
       const response = await fetch("/api/contributions/lookup", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ code, action }),
+        body: JSON.stringify({ code: target, action }),
       });
-      const value = await response.json();
-      if (!response.ok) throw new Error(value.error ?? "Lookup failed");
+      // A proxy refusing the request answers in HTML, not JSON. Parsing
+      // unguarded showed the contributor a syntax error from the parser.
+      const value = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(value?.error ?? (hindi ? "कुछ गड़बड़ हुई।" : "Something went wrong."));
+      }
       if (action === "withdraw") {
-        setSubmission(submission ? { ...submission, status: "withdrawn" } : null);
+        setResult((current) =>
+          current
+            ? { ...current, submission: { ...current.submission, status: "withdrawn" } }
+            : null,
+        );
         setMessage(hindi ? "आपका योगदान हटा दिया गया।" : "Your contribution has been removed.");
       } else {
-        setSubmission(value.submission);
+        setResult(value?.submission ? { code: target, submission: value.submission } : null);
       }
       setState("idle");
     } catch (error) {
