@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Language } from "@/app/lib/content";
 
 type Submission = {
@@ -48,11 +48,19 @@ export function RecoveryCodeLookup({ language }: { language: Language }) {
   const [message, setMessage] = useState("");
   const submission = result?.submission ?? null;
 
+  // Editing the field or starting another lookup supersedes whatever is still
+  // in flight, so a slow status response cannot put a card back that the field
+  // no longer matches. A withdrawal always reports its outcome: it has already
+  // happened on the server, and silence would leave that unsaid.
+  const latestRequest = useRef(0);
+
   async function send(action: "status" | "withdraw") {
     // Withdrawal acts on the submission on screen; a status check acts on
     // whatever has been typed.
     const target = action === "withdraw" ? result?.code : code;
     if (!target) return;
+    const requestId = ++latestRequest.current;
+    const superseded = () => action === "status" && requestId !== latestRequest.current;
     setState("loading");
     setMessage("");
     try {
@@ -63,6 +71,7 @@ export function RecoveryCodeLookup({ language }: { language: Language }) {
       });
       // A proxy refusing the request answers in HTML, not JSON.
       const value = await response.json().catch(() => null);
+      if (superseded()) return;
       if (!response.ok) {
         throw new Error(value?.error ?? (hindi ? "कुछ गड़बड़ हुई।" : "Something went wrong."));
       }
@@ -78,6 +87,7 @@ export function RecoveryCodeLookup({ language }: { language: Language }) {
       }
       setState("idle");
     } catch (error) {
+      if (superseded()) return;
       setState("error");
       setMessage(
         error instanceof Error
@@ -105,9 +115,12 @@ export function RecoveryCodeLookup({ language }: { language: Language }) {
               setCode(event.target.value.toUpperCase());
               // The card belongs to the code that fetched it and carries a
               // button that erases work for good, so it goes as soon as the
-              // field stops matching it.
+              // field stops matching it — and any lookup still in flight is
+              // superseded, or its answer would put it straight back.
+              latestRequest.current += 1;
               setResult(null);
               setMessage("");
+              setState("idle");
             }}
             placeholder="A7X9B2MZ"
             maxLength={16}
