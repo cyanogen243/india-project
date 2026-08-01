@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Language } from "@/app/lib/content";
 
 type Submission = {
@@ -39,29 +39,55 @@ const reasonLabels: Record<string, { en: string; hi: string }> = {
 export function RecoveryCodeLookup({ language }: { language: Language }) {
   const hindi = language === "hi";
   const [code, setCode] = useState("");
-  const [submission, setSubmission] = useState<Submission | null>(null);
+  // A submission is held with the code that fetched it, so withdrawal — which
+  // is irreversible — acts on the card on screen rather than on whatever the
+  // field says when the button is pressed. Editing the field clears this, so
+  // the two cannot disagree; pairing them holds even if that ever changes.
+  const [result, setResult] = useState<{ code: string; submission: Submission } | null>(null);
   const [state, setState] = useState<"idle" | "loading" | "error">("idle");
   const [message, setMessage] = useState("");
+  const submission = result?.submission ?? null;
+
+  // Editing the field or starting another lookup supersedes whatever is still
+  // in flight, so a slow status response cannot put a card back that the field
+  // no longer matches. A withdrawal always reports its outcome: it has already
+  // happened on the server, and silence would leave that unsaid.
+  const latestRequest = useRef(0);
 
   async function send(action: "status" | "withdraw") {
+    // Withdrawal acts on the submission on screen; a status check acts on
+    // whatever has been typed.
+    const target = action === "withdraw" ? result?.code : code;
+    if (!target) return;
+    const requestId = ++latestRequest.current;
+    const superseded = () => action === "status" && requestId !== latestRequest.current;
     setState("loading");
     setMessage("");
     try {
       const response = await fetch("/api/contributions/lookup", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ code, action }),
+        body: JSON.stringify({ code: target, action }),
       });
-      const value = await response.json();
-      if (!response.ok) throw new Error(value.error ?? "Lookup failed");
+      // A proxy refusing the request answers in HTML, not JSON.
+      const value = await response.json().catch(() => null);
+      if (superseded()) return;
+      if (!response.ok) {
+        throw new Error(value?.error ?? (hindi ? "कुछ गड़बड़ हुई।" : "Something went wrong."));
+      }
       if (action === "withdraw") {
-        setSubmission(submission ? { ...submission, status: "withdrawn" } : null);
+        setResult((current) =>
+          current
+            ? { ...current, submission: { ...current.submission, status: "withdrawn" } }
+            : null,
+        );
         setMessage(hindi ? "आपका योगदान हटा दिया गया।" : "Your contribution has been removed.");
       } else {
-        setSubmission(value.submission);
+        setResult(value?.submission ? { code: target, submission: value.submission } : null);
       }
       setState("idle");
     } catch (error) {
+      if (superseded()) return;
       setState("error");
       setMessage(
         error instanceof Error
@@ -85,7 +111,17 @@ export function RecoveryCodeLookup({ language }: { language: Language }) {
           <input
             className="lookup-code-input"
             value={code}
-            onChange={(event) => setCode(event.target.value.toUpperCase())}
+            onChange={(event) => {
+              setCode(event.target.value.toUpperCase());
+              // The card belongs to the code that fetched it and carries a
+              // button that erases work for good, so it goes as soon as the
+              // field stops matching it — and any lookup still in flight is
+              // superseded, or its answer would put it straight back.
+              latestRequest.current += 1;
+              setResult(null);
+              setMessage("");
+              setState("idle");
+            }}
             placeholder="A7X9B2MZ"
             maxLength={16}
             required

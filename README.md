@@ -84,6 +84,24 @@ The native Vercel Turso integration can be used without renaming its injected
 variables. `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` are accepted as
 production fallbacks when the corresponding `LIBSQL_*` values are absent.
 
+### Identifying a visitor behind the proxies
+
+Production serves `theindiaproject.net` through **Cloudflare in front of
+Vercel** — every response carries both a `cf-ray` and an `x-vercel-id`. Rate
+limits key on who the caller is, so the application reads `CF-Connecting-IP`,
+which Cloudflare sets on every request, overwriting what the caller sent.
+There is nothing to configure.
+
+`X-Forwarded-For` cannot serve here: Cloudflare appends to it and Vercel
+appends behind that, so its trailing entry is the Cloudflare edge — one
+identity shared by everyone routed through it — and its leading entry is the
+caller's to choose.
+
+Keep Cloudflare the only public route in, so that identity holds: on Vercel, do
+not leave a `*.vercel.app` alias publicly reachable; on a self-hosted origin,
+restrict the host to Cloudflare's published ranges. Both are standard hardening,
+and worth reconfirming whenever the deployment changes.
+
 Use a different high-entropy value for each secret. Rotate a session secret by
 replacing it and revoking sessions; rotate the rate-limit secret independently.
 Changing the Ed25519 feed key changes the public verification identity, so
@@ -159,6 +177,10 @@ Two commands support the contribution wall:
 
 - `npm run seed:art` loads the opening collection. Run once per database, with
   the object-storage variables set.
+- `npm run check:storage` proves a bucket before a deploy trusts it: it writes,
+  reads back, deletes, and confirms the object is gone. The automated tests
+  exercise the storage driver against an in-memory stand-in, so this is the
+  only check that exercises real credentials, region and signing.
 
 ## Validation
 
