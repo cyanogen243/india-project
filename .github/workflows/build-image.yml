@@ -39,19 +39,6 @@ jobs:
             ghcr.io/${{ github.repository }}:${{ steps.vars.outputs.shortsha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      # The runtime image is the Next standalone output, which carries neither
-      # the scripts nor tsx, so a one-off task like seeding has nowhere to run.
-      # This stops at the build stage, which has both, and reuses the cache
-      # from the layers just built.
-      - name: Build tooling image (one-off tasks such as seeding)
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          target: build
-          push: true
-          tags: |
-            ghcr.io/${{ github.repository }}:tools-${{ steps.vars.outputs.shortsha }}
-          cache-from: type=gha
 
   release:
     if: github.ref == 'refs/heads/main'
@@ -85,22 +72,11 @@ jobs:
           IMAGE="ghcr.io/${{ github.repository }}"
           V=$(gh api "repos/${{ github.repository }}/releases/latest" --jq .tag_name 2>/dev/null || true)
           [ -n "$V" ] || { echo "no releases yet"; exit 0; }
-          # Checked separately so a release that got one tag still gains the
-          # other on a later run.
-          missing=""
-          docker manifest inspect "$IMAGE:$V" > /dev/null 2>&1 || missing="$missing app"
-          docker manifest inspect "$IMAGE:tools-$V" > /dev/null 2>&1 || missing="$missing tools"
-          if [ -z "$missing" ]; then
+          if docker manifest inspect "$IMAGE:$V" > /dev/null 2>&1; then
             echo "$V already tagged"; exit 0
           fi
-          echo "tags to create for $V:$missing"
           git fetch --tags -q
           # ^{commit} so an annotated tag resolves to the commit the build job
           # tagged its image with, cut to the same seven characters it used.
           S=$(git rev-parse "$V^{commit}" | cut -c1-7)
-          for want in $missing; do
-            case "$want" in
-              app)   docker buildx imagetools create -t "$IMAGE:$V"       "$IMAGE:$S" ;;
-              tools) docker buildx imagetools create -t "$IMAGE:tools-$V" "$IMAGE:tools-$S" ;;
-            esac
-          done
+          docker buildx imagetools create -t "$IMAGE:$V" "$IMAGE:$S"
