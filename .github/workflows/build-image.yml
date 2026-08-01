@@ -38,6 +38,9 @@ jobs:
       - run: npm run lint
 
   build:
+    # Also on workflow_dispatch, which can be aimed at any branch: nothing is
+    # published from a commit that is not on main.
+    if: github.ref == 'refs/heads/main'
     needs: test
     runs-on: ubuntu-latest
     outputs:
@@ -59,8 +62,40 @@ jobs:
           push: true
           tags: |
             ghcr.io/${{ github.repository }}:${{ steps.vars.outputs.shortsha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # The tests above run on the runner, not in the image, and the way this
+      # image breaks is quiet: a native library the tracer cannot see goes
+      # missing and Next serves originals instead of failing. So start what was
+      # pushed and make it prove otherwise.
+      - name: Smoke-test the pushed image
+        run: |
+          set -euo pipefail
+          IMAGE="ghcr.io/${{ github.repository }}:${{ steps.vars.outputs.shortsha }}"
+          docker run -d --name smoke -p 3000:3000 \
+            -e LIBSQL_URL=file:/tmp/smoke.db \
+            -e SESSION_SECRET=smoke-session-secret-not-for-production \
+            -e RATE_LIMIT_SECRET=smoke-rate-limit-secret-not-for-production \
+            -e SITE_URL=https://smoke.invalid "$IMAGE"
+          for _ in $(seq 30); do
+            curl -fsS -o /dev/null http://localhost:3000/ && break || sleep 1
+          done
+          curl -fsS -o /dev/null http://localhost:3000/
+          # A re-encode is smaller than the file it came from; a fallback that
+          # passes the original through is exactly the same size.
+          SERVED=$(curl -fsS -H 'accept: image/webp' -o /dev/null -w '%{size_download}' \
+            "http://localhost:3000/_next/image?url=%2Fog.png&w=640&q=75")
+          ORIGINAL=$(docker exec smoke stat -c%s public/og.png)
+          echo "served=$SERVED original=$ORIGINAL"
+          [ "$SERVED" -lt "$ORIGINAL" ] || { docker logs smoke; echo "images are not being optimised"; exit 1; }
+          if docker logs smoke 2>&1 | grep -q EACCES; then
+            docker logs smoke; echo "the running image cannot write where it needs to"; exit 1
+          fi
+          docker rm -f smoke
 
   release:
     if: github.ref == 'refs/heads/main'
@@ -76,31 +111,30 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+          cache: npm
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      # Exact versions: this job holds a token that can write releases and
-      # packages, so what npx executes is pinned, not resolved at run time.
+      # From the lockfile, not resolved at run time: this job holds a token
+      # that can write releases and packages, so every transitive dependency
+      # it executes is one the repository has committed to.
+      - run: npm ci
       - name: semantic-release (tag + GitHub Release from conventional commits)
-        run: npx --yes -p conventional-changelog-conventionalcommits@8.0.0 -p semantic-release@24.2.9 semantic-release
+        run: npx semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      # Idempotent: give the latest release its version tag, whether or not
-      # this run is the one that minted it.
-      - name: Ensure the latest release has its image tag (no rebuild)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Read from the tag semantic-release just put on this commit, not from
+      # whichever release GitHub considers latest: releases minted before this
+      # workflow existed have no image to point at, and a run that mints
+      # nothing must not try to tag one. Re-running the job repeats the alias
+      # harmlessly.
+      - name: Give the built image its version tag (no rebuild)
         run: |
+          set -euo pipefail
+          V=$(git tag --points-at HEAD | grep -E '^v[0-9]' | head -n1 || true)
+          if [ -z "$V" ]; then echo "this run minted no release"; exit 0; fi
           IMAGE="ghcr.io/${{ github.repository }}"
-          V=$(gh api "repos/${{ github.repository }}/releases/latest" --jq .tag_name 2>/dev/null || true)
-          [ -n "$V" ] || { echo "no releases yet"; exit 0; }
-          if docker manifest inspect "$IMAGE:$V" > /dev/null 2>&1; then
-            echo "$V already tagged"; exit 0
-          fi
-          git fetch --tags -q
-          # ^{commit} so an annotated tag resolves to the commit the build job
-          # tagged its image with, cut to the same seven characters it used.
-          S=$(git rev-parse "$V^{commit}" | cut -c1-7)
-          docker buildx imagetools create -t "$IMAGE:$V" "$IMAGE:$S"
+          docker buildx imagetools create -t "$IMAGE:$V" "$IMAGE:${GITHUB_SHA::7}"
+          echo "tagged $IMAGE:$V"

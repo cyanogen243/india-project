@@ -21,6 +21,10 @@ COPY --from=build /app/public ./public
 # binding but not the libvips it opens at runtime. Ship the packages whole.
 COPY --from=build /app/node_modules/sharp ./node_modules/sharp
 COPY --from=build /app/node_modules/@img ./node_modules/@img
+# The image optimiser writes resized files here and cannot create the
+# directory itself: everything copied above is root-owned, which is what keeps
+# the application unable to rewrite the code it is serving.
+RUN mkdir -p .next/cache && chown -R node:node .next/cache
 USER node
 EXPOSE 3000
 CMD ["node", "server.js"]

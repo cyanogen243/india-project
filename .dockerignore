@@ -5,6 +5,13 @@ dist
 data
 test-results
 tsconfig.tsbuildinfo
-.env*
 .DS_Store
 Dockerfile
+
+# Secrets: a build context is also what `--target build` and an exported cache carry.
+.env*
+.private
+*.pem
+outputs
+work
+tmp
