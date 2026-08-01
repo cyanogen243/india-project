@@ -1,12 +1,12 @@
 name: build-image
 
 # Build and publish versioned container images.
-#   every push: image variants pushed to GHCR (sha-tagged)
-#   main only: semantic-release mints vX.Y.Z and aliases the same images
+#   every push: one sha-tagged image pushed to GHCR
+#   main only: semantic-release mints vX.Y.Z and tags that same image
 
 on:
   push:
-    branches: [main, feat/self-hosting]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -28,29 +28,17 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      # NEXT_PUBLIC_* values are baked at build time, so each environment gets
-      # its own image variant. Releases alias these — nothing builds twice.
-      - name: Build staging-baked image
+      # One image for every environment. SITE_URL is supplied where the
+      # container runs, so staging and production share these exact bytes.
+      - name: Build image
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
-          build-args: |
-            NEXT_PUBLIC_SITE_URL=http://localhost:3000
           tags: |
-            ghcr.io/${{ github.repository }}:staging-${{ steps.vars.outputs.shortsha }}
+            ghcr.io/${{ github.repository }}:${{ steps.vars.outputs.shortsha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - name: Build production-baked image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          build-args: |
-            NEXT_PUBLIC_SITE_URL=https://www.theindiaproject.net
-          tags: |
-            ghcr.io/${{ github.repository }}:prod-${{ steps.vars.outputs.shortsha }}
-          cache-from: type=gha
 
   release:
     if: github.ref == 'refs/heads/main'
@@ -75,18 +63,20 @@ jobs:
         run: npx --yes -p conventional-changelog-conventionalcommits -p semantic-release@24 semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      # Idempotent: whatever the latest release is, make sure its image
-      # aliases exist. Self-heals releases stranded by earlier failures.
-      - name: Ensure the latest release has image aliases (no rebuild)
+      # Idempotent: give the latest release its version tag, whether or not
+      # this run is the one that minted it.
+      - name: Ensure the latest release has its image tag (no rebuild)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          IMAGE="ghcr.io/${{ github.repository }}"
           V=$(gh api "repos/${{ github.repository }}/releases/latest" --jq .tag_name 2>/dev/null || true)
           [ -n "$V" ] || { echo "no releases yet"; exit 0; }
-          if docker manifest inspect "ghcr.io/${{ github.repository }}:$V" > /dev/null 2>&1; then
-            echo "$V already aliased"; exit 0
+          if docker manifest inspect "$IMAGE:$V" > /dev/null 2>&1; then
+            echo "$V already tagged"; exit 0
           fi
           git fetch --tags -q
-          S=$(git rev-parse --short=7 "$V")
-          docker buildx imagetools create -t "ghcr.io/${{ github.repository }}:$V" "ghcr.io/${{ github.repository }}:prod-$S"
-          docker buildx imagetools create -t "ghcr.io/${{ github.repository }}:$V-staging" "ghcr.io/${{ github.repository }}:staging-$S"
+          # ^{commit} so an annotated tag resolves to the commit the build job
+          # tagged its image with, cut to the same seven characters it used.
+          S=$(git rev-parse "$V^{commit}" | cut -c1-7)
+          docker buildx imagetools create -t "$IMAGE:$V" "$IMAGE:$S"

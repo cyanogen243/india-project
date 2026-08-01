@@ -1,6 +1,5 @@
-# Build args:
-#   NEXT_PUBLIC_SITE_URL — baked into the client bundle at build time; must be
-#   the public URL of the deployment this image is destined for.
+# One image for every environment: SITE_URL is read at runtime, so the artifact
+# tested on staging is the one released.
 FROM node:24-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -10,8 +9,6 @@ FROM node:24-slim AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-ARG NEXT_PUBLIC_SITE_URL=http://localhost:3000
-ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
 # The build statically renders pages that touch the database; ensureDatabase()
 # creates a throwaway one at the default file:./data path.
 RUN mkdir -p data && npm run build
