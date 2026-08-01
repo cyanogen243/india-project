@@ -1,8 +1,8 @@
 name: build-image
 
 # Build and publish versioned container images.
-#   every push: one sha-tagged image pushed to GHCR
-#   main only: semantic-release mints vX.Y.Z and tags that same image
+#   each push to main: one sha-tagged image pushed to GHCR
+#   then: semantic-release mints vX.Y.Z and tags that same image
 
 on:
   push:
@@ -13,8 +13,32 @@ permissions:
   contents: read
   packages: write
 
+# Releases are minted from an ordered history; runs for successive pushes
+# queue rather than race the tag.
+concurrency:
+  group: build-image-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  # The same gate as ci.yml: nothing is published from a commit that fails it.
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      VERIFY_COMMITTED_FEED_ONLY: "true"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm exec tsc -- --noEmit
+      - run: npm run lint
+
   build:
+    needs: test
     runs-on: ubuntu-latest
     outputs:
       shortsha: ${{ steps.vars.outputs.shortsha }}
@@ -57,8 +81,10 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # Exact versions: this job holds a token that can write releases and
+      # packages, so what npx executes is pinned, not resolved at run time.
       - name: semantic-release (tag + GitHub Release from conventional commits)
-        run: npx --yes -p conventional-changelog-conventionalcommits -p semantic-release@24 semantic-release
+        run: npx --yes -p conventional-changelog-conventionalcommits@8.0.0 -p semantic-release@24.2.9 semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       # Idempotent: give the latest release its version tag, whether or not

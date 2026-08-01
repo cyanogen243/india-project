@@ -9,9 +9,7 @@ FROM node:24-slim AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# The build statically renders pages that touch the database; ensureDatabase()
-# creates a throwaway one at the default file:./data path.
-RUN mkdir -p data && npm run build
+RUN npm run build
 
 FROM node:24-slim AS run
 WORKDIR /app
