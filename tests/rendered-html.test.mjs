@@ -76,3 +76,26 @@ test("renders Hindi, receipts, and the no-upload evidence page", async () => {
   assert.match(evidenceHtml, /No files can be uploaded here/);
   assert.doesNotMatch(evidenceHtml, /<form|type="file"/i);
 });
+
+test("the Worker bundle carries no native module", async () => {
+  // Importing this artifact in Node proves nothing about the runtime it ships
+  // to: Node loads native bindings happily, and a Cloudflare Worker cannot load
+  // them at all. sharp reached the bundle through `app/lib/contributions.ts`,
+  // which routes import for its recovery-code helpers and size constants, so a
+  // module-scope import there took down the whole Worker on start — including
+  // text contributions and every route that never touches an image.
+  //
+  // The bundle is the only place this is visible without a real isolate, so the
+  // bundle is what gets checked.
+  const { readFile } = await import("node:fs/promises");
+  const bundle = await readFile(
+    new URL("../dist/server/index.js", import.meta.url),
+    "utf8",
+  );
+  for (const marker of ["node_modules/sharp/", "@img/sharp"]) {
+    assert.ok(
+      !bundle.includes(marker),
+      `${marker} is in the Worker bundle — load it inside the function that needs it instead`,
+    );
+  }
+});

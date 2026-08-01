@@ -20,6 +20,17 @@ for await (const path of glob(["app/**/*.{ts,tsx}", "content/**/*.json"], {
   paths.push(path);
 }
 
+// Every form surface stays on this list so adding one remains a deliberate,
+// reviewed act. `ContributeForm` accepts image uploads: they are re-encoded
+// server-side before storage, which strips embedded author and location
+// metadata, and nothing reaches the public site without admin approval.
+const approvedForms = [
+  "app/components/VolunteerForm.tsx",
+  "app/components/ContributeForm.tsx",
+  "app/components/RecoveryCodeLookup.tsx",
+  "app/admin/AdminApp.tsx",
+];
+
 for (const path of paths) {
   const source = await readFile(path, "utf8");
   if (/<iframe/i.test(source)) throw new Error(`${path}: iframe embeds are forbidden`);
@@ -27,14 +38,9 @@ for (const path of paths) {
     throw new Error(`${path}: third-party fonts are forbidden`);
   }
   if (/<form/i.test(source)) {
-    const approvedForm =
-      path.endsWith("app\\components\\VolunteerForm.tsx") ||
-      path.endsWith("app/components/VolunteerForm.tsx") ||
-      path.endsWith("app\\admin\\AdminApp.tsx") ||
-      path.endsWith("app/admin/AdminApp.tsx");
-    if (!approvedForm) throw new Error(`${path}: unreviewed form surface`);
-    if (/type=["']file["']/i.test(source)) {
-      throw new Error(`${path}: file uploads remain forbidden`);
+    const normalised = path.split("\\").join("/");
+    if (!approvedForms.some((approved) => normalised.endsWith(approved))) {
+      throw new Error(`${path}: unreviewed form surface`);
     }
   }
 }

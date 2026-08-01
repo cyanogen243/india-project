@@ -1,0 +1,430 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
+import type { Language } from "@/app/lib/content";
+
+const MAX_BYTES = 4 * 1024 * 1024;
+
+type Kind = "poster" | "image" | "poem" | "essay";
+
+function formatBytes(bytes: number) {
+  return bytes < 1024 * 1024
+    ? `${Math.round(bytes / 1024)} KB`
+    : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export function ContributeForm({ language }: { language: Language }) {
+  const hindi = language === "hi";
+  const startedAt = useRef(0);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [kind, setKind] = useState<Kind>("poster");
+  // Three ways to attribute: your own work anonymously, your own work under a
+  // public account, or someone else's public-domain work you are passing on.
+  const [creditMode, setCreditMode] = useState<"anonymous" | "account" | "public_domain">(
+    "anonymous",
+  );
+  const [preview, setPreview] = useState<{ url: string; name: string; size: number } | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [message, setMessage] = useState("");
+  const [recoveryCode, setRecoveryCode] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  const isFileKind = kind === "poster" || kind === "image";
+  const isTextKind = kind === "poem" || kind === "essay";
+
+  useEffect(() => {
+    startedAt.current = Date.now();
+  }, []);
+
+  // Object URLs hold the file in memory until they are released.
+  useEffect(() => {
+    return () => {
+      if (preview) URL.revokeObjectURL(preview.url);
+    };
+  }, [preview]);
+
+  function acceptFile(file: File | undefined) {
+    if (!file) return;
+    if (file.size > MAX_BYTES) {
+      setState("error");
+      setMessage(
+        hindi
+          ? `यह फ़ाइल ${formatBytes(file.size)} की है। अधिकतम 4 MB।`
+          : `That file is ${formatBytes(file.size)}. The limit is 4 MB.`,
+      );
+      return;
+    }
+    setState("idle");
+    setMessage("");
+    // A data: URL rather than createObjectURL — the CSP's img-src allows
+    // data: and deliberately not blob:, so an object URL renders as a broken
+    // image.
+    const reader = new FileReader();
+    reader.onload = () => {
+      setPreview({ url: String(reader.result), name: file.name, size: file.size });
+    };
+    reader.readAsDataURL(file);
+  }
+
+  if (state === "sent") {
+    return (
+      <div className="contribute-receipt" role="status">
+        <p className="eyebrow">{hindi ? "मिल गया" : "Received"}</p>
+        <h2>{hindi ? "आपका योगदान कतार में है" : "Your contribution is in the queue"}</h2>
+        <p>
+          {hindi
+            ? "एक स्वयंसेवक की समीक्षा के बाद ही यह सार्वजनिक होगा।"
+            : "A volunteer will review it before anything appears publicly."}
+        </p>
+
+        <div className="contribute-code-block">
+          <p className="contribute-code-label">
+            {hindi ? "यह कोड अभी सहेजें" : "Save this code now"}
+          </p>
+          <code className="contribute-code">{recoveryCode}</code>
+          <button
+            type="button"
+            className="button"
+            onClick={() => {
+              void navigator.clipboard.writeText(recoveryCode);
+              setCopied(true);
+            }}
+          >
+            {copied ? (hindi ? "कॉपी हो गया" : "Copied") : hindi ? "कॉपी करें" : "Copy"}
+          </button>
+        </div>
+
+        <p className="contribute-warning">
+          {hindi
+            ? "यह दोबारा नहीं दिखेगा — हम नाम या ईमेल नहीं रखते, इसलिए खोया कोड वापस नहीं मिलता। इससे स्थिति देखें, या योगदान हटाकर सुधरा हुआ दोबारा भेजें।"
+            : "It's shown once — we hold no name or email, so a lost code can't be recovered. Use it to check status, or to take your work down and send a corrected version."}
+        </p>
+      </div>
+    );
+  }
+
+  const kinds: [Kind, string, string][] = [
+    ["poster", hindi ? "पोस्टर" : "Poster", hindi ? "छापने और थामने के लिए" : "Made to print and carry"],
+    ["image", hindi ? "चित्र" : "Image", hindi ? "कलाकृति, चित्रण, फ़ोटो" : "Artwork, illustration, photo"],
+    ["poem", hindi ? "कविता" : "Poem", hindi ? "पूरी दिखती है · लंबी कविता का अपना पन्ना" : "Shown in full · longer poems get their own page"],
+    ["essay", hindi ? "लेख" : "Essay", hindi ? "दीवार पर शुरुआती पंक्तियाँ · पूरा लेख अपने पन्ने पर" : "Opening lines on the wall · full essay on its own page"],
+  ];
+
+  return (
+    <form
+      className="contribute-form"
+      onSubmit={async (event) => {
+        event.preventDefault();
+        const form = new FormData(event.currentTarget);
+        if (isFileKind && !preview) {
+          setState("error");
+          setMessage(hindi ? "एक तस्वीर चुनें।" : "Choose an image to share.");
+          return;
+        }
+        setState("sending");
+        setMessage("");
+        form.set("kind", kind);
+        form.set("language", language);
+        form.set("startedAt", String(startedAt.current));
+        if (!isFileKind) form.delete("file");
+        // One credit mode at a time — the server rejects a submission that
+        // claims both an alias and an account.
+        form.set("provenance", creditMode === "public_domain" ? "public_domain" : "own");
+        if (creditMode !== "account") form.set("creditAccount", "");
+        if (creditMode === "account") form.set("credit", "");
+        if (creditMode !== "public_domain") form.delete("sourceUrl");
+        try {
+          const response = await fetch("/api/contributions", { method: "POST", body: form });
+          const value = await response.json();
+          if (!response.ok) throw new Error(value.error ?? "Submission failed");
+          // A 202 means the anti-bot trap swallowed it and nothing was stored,
+          // so there is no code. Showing the receipt anyway would tell someone
+          // their work is queued, under a warning that the blank code cannot
+          // be recovered.
+          if (!value.recoveryCode) {
+            throw new Error(
+              hindi
+                ? "यह भेजा नहीं जा सका। एक पल रुककर दोबारा भेजें।"
+                : "That did not go through. Give it a moment and send again.",
+            );
+          }
+          setRecoveryCode(String(value.recoveryCode));
+          setState("sent");
+        } catch (error) {
+          setState("error");
+          setMessage(
+            error instanceof Error
+              ? error.message
+              : hindi
+                ? "अभी फ़ॉर्म जमा नहीं हो सका।"
+                : "The form could not be submitted.",
+          );
+        }
+      }}
+    >
+      <fieldset className="contribute-kind">
+        <legend>{hindi ? "आप क्या साझा कर रहे हैं?" : "What are you sharing?"}</legend>
+        <div className="contribute-kind-grid">
+          {kinds.map(([value, label, hint]) => (
+            <label key={value} className={`contribute-kind-card ${kind === value ? "selected" : ""}`}>
+              <input
+                type="radio"
+                name="kindChoice"
+                value={value}
+                checked={kind === value}
+                onChange={() => {
+                setKind(value);
+                // Public domain is only offered for writing.
+                if ((value === "poster" || value === "image") && creditMode === "public_domain") {
+                  setCreditMode("anonymous");
+                }
+              }}
+              />
+              <strong>{label}</strong>
+              <small>{hint}</small>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
+      {/* Stated before the file picker rather than as fine print at the end.
+          Whether the work is the contributor's own is the single most common
+          reason a submission is declined, so it should be read first. */}
+      <aside className="contribute-terms">
+        <h3>{hindi ? "भेजने से पहले" : "Before you send"}</h3>
+        <ul>
+          <li>
+            {hindi
+              ? "अपना बनाया हुआ काम भेजें — या कोई सार्वजनिक-डोमेन रचना, स्रोत के साथ।"
+              : "Send work you made yourself — or a public-domain work, with its source."}
+          </li>
+          <li>
+            {hindi
+              ? "आपका अपना स्वीकृत काम CC BY-NC-SA 4.0 के तहत जारी होगा: कोई भी इसे मुफ़्त साझा और रीमिक्स कर सकता है, पर बेच नहीं सकता। सार्वजनिक-डोमेन रचनाएँ अपनी शर्तों के साथ रहती हैं।"
+              : "Your own approved work is released under CC BY-NC-SA 4.0 — anyone may share and remix it freely, but nobody may sell it. Public-domain works keep their own terms."}
+          </li>
+        </ul>
+      </aside>
+
+      <div className="form-grid">
+        <label>
+          {hindi ? "शीर्षक" : "Title"}
+          <input name="title" required minLength={2} maxLength={120} />
+        </label>
+        {!isFileKind && (
+          <label>
+            {hindi ? "उपशीर्षक (वैकल्पिक)" : "Subtitle (optional)"}
+            <input
+              name="subtitle"
+              maxLength={120}
+              placeholder={hindi ? "शीर्षक के नीचे एक पंक्ति" : "A line under the title"}
+            />
+          </label>
+        )}
+      </div>
+
+      <fieldset className="contribute-kind">
+        <legend>{hindi ? "श्रेय" : "Credit"}</legend>
+        <div className="contribute-kind-grid">
+          <label className={`contribute-kind-card ${creditMode === "anonymous" ? "selected" : ""}`}>
+            <input
+              type="radio"
+              name="creditChoice"
+              checked={creditMode === "anonymous"}
+              onChange={() => setCreditMode("anonymous")}
+            />
+            <strong>{hindi ? "गुमनाम" : "Anonymous"}</strong>
+            <small>{hindi ? "आपका अपना काम · आपके बारे में कुछ नहीं रखा जाता" : "Your own work · nothing about you is stored"}</small>
+          </label>
+          <label className={`contribute-kind-card ${creditMode === "account" ? "selected" : ""}`}>
+            <input
+              type="radio"
+              name="creditChoice"
+              checked={creditMode === "account"}
+              onChange={() => setCreditMode("account")}
+            />
+            <strong>{hindi ? "सार्वजनिक श्रेय दें" : "Credit me publicly"}</strong>
+            <small>{hindi ? "आपका अपना काम · खाता दीवार पर दिखेगा" : "Your own work · account shown on the wall"}</small>
+          </label>
+          {isTextKind && (
+            <label className={`contribute-kind-card ${creditMode === "public_domain" ? "selected" : ""}`}>
+              <input
+                type="radio"
+                name="creditChoice"
+                checked={creditMode === "public_domain"}
+                onChange={() => setCreditMode("public_domain")}
+              />
+              <strong>{hindi ? "सार्वजनिक डोमेन" : "Public domain"}</strong>
+              <small>{hindi ? "किसी और का काम जो साझा करने के लिए स्वतंत्र है" : "Someone else's work that is free to share"}</small>
+            </label>
+          )}
+        </div>
+        {creditMode === "account" && (
+          <label className="contribute-credit-field">
+            {hindi ? "सार्वजनिक खाता" : "Public account"}
+            <input
+              name="creditAccount"
+              maxLength={120}
+              placeholder={hindi ? "@हैंडल — X, Instagram या Bluesky" : "@handle — X, Instagram or Bluesky"}
+            />
+          </label>
+        )}
+        {creditMode === "anonymous" && (
+          <label className="contribute-credit-field">
+            {hindi ? "नाम या उपनाम (वैकल्पिक)" : "Name or alias (optional)"}
+            <input
+              name="credit"
+              maxLength={80}
+              placeholder={hindi ? "खाली छोड़ने पर 'गुमनाम' दिखेगा" : "Left blank, the wall shows “Anonymous”"}
+            />
+          </label>
+        )}
+        {creditMode === "public_domain" && (
+          <>
+            <label className="contribute-credit-field">
+              {hindi ? "मूल लेखक" : "Original author"}
+              <input
+                name="credit"
+                maxLength={80}
+                required
+                placeholder={hindi ? "जैसे भगत सिंह" : "e.g. Bhagat Singh"}
+              />
+            </label>
+            <label className="contribute-credit-field">
+              {hindi ? "यह कहाँ प्रकाशित है" : "Where it is published"}
+              <input
+                name="sourceUrl"
+                type="url"
+                maxLength={500}
+                required
+                placeholder="https://www.marxists.org/…"
+              />
+            </label>
+            <p className="privacy">
+              {hindi
+                ? "एक स्वयंसेवक इस लिंक से जाँचेगा कि यह वाक़ई सार्वजनिक डोमेन में है।"
+                : "A volunteer will use this link to check that the work really is free to share."}
+            </p>
+          </>
+        )}
+      </fieldset>
+
+      {isFileKind ? (
+        <div
+          className={`contribute-dropzone ${dragging ? "dragging" : ""} ${preview ? "filled" : ""}`}
+          onDragOver={(event) => {
+            event.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(event) => {
+            event.preventDefault();
+            setDragging(false);
+            const file = event.dataTransfer.files?.[0];
+            if (file && fileInput.current) {
+              const transfer = new DataTransfer();
+              transfer.items.add(file);
+              fileInput.current.files = transfer.files;
+              acceptFile(file);
+            }
+          }}
+        >
+          {preview ? (
+            <div className="contribute-preview">
+              <Image
+                src={preview.url}
+                alt={hindi ? "चुनी गई तस्वीर" : "Selected image"}
+                width={280}
+                height={350}
+                unoptimized
+              />
+              <div>
+                <p><strong>{preview.name}</strong></p>
+                <p>{formatBytes(preview.size)}</p>
+              </div>
+            </div>
+          ) : (
+            <p>{hindi ? "तस्वीर यहाँ छोड़ें" : "Drop your image here"}</p>
+          )}
+
+          {/* A drop zone alone is unusable on touch and with assistive tech, so
+              the input stays a real, labelled, keyboard-reachable control. */}
+          <label className="contribute-browse">
+            <span>
+              {preview
+                ? hindi ? "दूसरी फ़ाइल चुनें" : "Choose a different file"
+                : hindi ? "या फ़ाइल चुनें" : "or browse for a file"}
+            </span>
+            <input
+              ref={fileInput}
+              type="file"
+              name="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={(event) => acceptFile(event.target.files?.[0])}
+            />
+          </label>
+          <small>
+            {hindi
+              ? "PNG, JPEG या WebP · अधिकतम 4 MB · A3 तक छपने लायक रखा जाता है"
+              : "PNG, JPEG or WebP · 4 MB maximum · kept at print quality up to A3"}
+          </small>
+        </div>
+      ) : (
+        <label>
+          {kind === "poem" ? (hindi ? "आपकी कविता" : "Your poem") : hindi ? "आपका लेख" : "Your essay"}
+          <textarea
+            name="body"
+            rows={12}
+            minLength={4}
+            maxLength={kind === "poem" ? 8000 : 40000}
+            required
+          />
+        </label>
+      )}
+
+      {isFileKind && (
+        <p className="contribute-privacy">
+          <strong>{hindi ? "हम फ़ाइल दोबारा बनाते हैं।" : "We rebuild the file."}</strong>{" "}
+          {hindi
+            ? "इससे उसमें छिपी जानकारी हट जाती है — जैसे कैमरे का दर्ज किया हुआ स्थान, या डिज़ाइन सॉफ़्टवेयर का लिखा आपका नाम।"
+            : "That removes hidden information it may carry — the location a camera recorded, or your name written in by design software."}
+        </p>
+      )}
+
+      {/* Left empty by people and filled in by bots. */}
+      <label className="honeypot" aria-hidden="true">
+        Website
+        <input name="website" tabIndex={-1} autoComplete="off" />
+      </label>
+
+      <label className="consent-row">
+        <input name="consent" type="checkbox" value="yes" required />
+        <span>
+          {hindi
+            ? creditMode === "public_domain"
+              ? "यह रचना सार्वजनिक डोमेन में है और साझा करने के लिए स्वतंत्र है; मैंने स्रोत दिया है।"
+              : "यह काम मेरा अपना है, और मैं इसे CC BY-NC-SA 4.0 के तहत जारी करता/करती हूँ।"
+            : creditMode === "public_domain"
+              ? "This work is in the public domain and free to share, and I have linked where it came from."
+              : "This work is my own, and I release it under CC BY-NC-SA 4.0."}
+        </span>
+      </label>
+
+      <p aria-live="polite" className={state === "error" ? "admin-banner error" : "visually-hidden"}>
+        {state === "error"
+          ? message
+          : state === "sending"
+            ? hindi ? "भेजा जा रहा है" : "Sending"
+            : ""}
+      </p>
+
+      <button className="button button-primary" type="submit" disabled={state === "sending"}>
+        {state === "sending"
+          ? hindi ? "भेजा जा रहा है…" : "Sending…"
+          : hindi ? "योगदान भेजें" : "Send contribution"}
+      </button>
+    </form>
+  );
+}

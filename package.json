@@ -18,14 +18,18 @@
     "check:security": "node scripts/check-security.mjs",
     "db:setup": "tsx scripts/db-setup.ts",
     "db:check": "tsx scripts/check-database.ts",
+    "check:storage": "tsx scripts/check-storage.ts",
     "db:generate": "drizzle-kit generate",
     "admin:bootstrap": "tsx scripts/bootstrap-admin.ts",
     "typecheck": "tsc --noEmit",
-    "test": "npm run build && node --test tests/vercel-rendered-html.test.mjs",
+    "test": "npm run test:unit && npm run build && node --test tests/vercel-rendered-html.test.mjs tests/contribution-lifecycle.test.mjs tests/storage-driver.test.mjs",
+    "test:unit": "tsx --test tests/volunteer-filter.test.ts",
     "test:sites": "npm run build:sites && node --test tests/rendered-html.test.mjs",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern .output"
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern .output --ignore-pattern .astro --ignore-pattern .netlify --ignore-pattern dist-demo --ignore-pattern test-results",
+    "seed:art": "tsx scripts/seed-contributions.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1096.0",
     "@fontsource/anton": "^5.3.0",
     "@fontsource/inter": "^5.3.0",
     "@libsql/client": "^0.17.4",
@@ -33,6 +37,7 @@
     "next": "16.2.11",
     "react": "19.2.6",
     "react-dom": "19.2.6",
+    "sharp": "0.35.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

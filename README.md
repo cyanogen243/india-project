@@ -70,6 +70,11 @@ For hosted Turso/libSQL, set:
 LIBSQL_URL=libsql://your-database.turso.io
 LIBSQL_AUTH_TOKEN=...
 SESSION_SECRET=...
+ART_S3_ENDPOINT=          # object storage for gallery images (any S3-compatible bucket)
+ART_S3_BUCKET=
+ART_S3_ACCESS_KEY_ID=
+ART_S3_SECRET_ACCESS_KEY=
+ART_S3_REGION=            # optional, defaults to "auto"
 RATE_LIMIT_SECRET=...
 FEED_SIGNING_PRIVATE_KEY=...
 SITE_URL=https://your-domain.example
@@ -108,8 +113,7 @@ Volunteer intake collects only a name or alias, email, contact platform and
 handle, skills, languages, availability, a short note, and consent. Contact
 platforms are limited to WhatsApp, Telegram, and Discord; the form asks for a
 handle rather than a phone number. It deliberately omits IDs, files, and precise
-locations. Declined and archived records become cleanup eligible after 180 days
-and can be explicitly deleted by an admin.
+locations. An admin can delete a record outright at any time.
 
 Editorial content is saved as drafts and published per collection. Existing
 source tiers, bilingual parity, timestamps, reviewer requirements, unsafe HTML,
@@ -154,6 +158,11 @@ Regenerate app icons from the approved primary mark with:
 ```sh
 npm run build:brand
 ```
+
+Two commands support the contribution wall:
+
+- `npm run seed:art` loads the opening collection. Run once per database, with
+  the object-storage variables set.
 
 ## Validation
 
