@@ -112,6 +112,21 @@ test("renders Hindi and keeps removed or hidden routes unavailable", async () =>
   );
 });
 
+test("serves the receipts page, and an evidence page that takes no uploads", async () => {
+  const [receipts, evidence] = await Promise.all([render("/receipts"), render("/evidence")]);
+  assert.equal(receipts.status, 200);
+  assert.equal(evidence.status, 200);
+
+  const receiptsHtml = await receipts.text();
+  assert.match(receiptsHtml, /Share the receipts/);
+  assert.match(receiptsHtml, /Share verified receipt/);
+  assert.match(receiptsHtml, /Copy receipt/);
+
+  const evidenceHtml = await evidence.text();
+  assert.match(evidenceHtml, /No files can be uploaded here/);
+  assert.doesNotMatch(evidenceHtml, /<form|type="file"/i);
+});
+
 test("keeps admin, API, and live page visits out of stale service-worker caches", async () => {
   const worker = await readFile(path.join(process.cwd(), "public", "sw.js"), "utf8");
   assert.match(worker, /url\.pathname\.startsWith\("\/api\/"\)/);

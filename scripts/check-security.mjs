@@ -59,7 +59,7 @@ for (const path of paths) {
   }
 }
 
-const worker = await readFile("worker/index.ts", "utf8");
+const nextConfig = await readFile("next.config.ts", "utf8");
 for (const header of [
   "Content-Security-Policy",
   "Referrer-Policy",
@@ -67,7 +67,7 @@ for (const header of [
   "Permissions-Policy",
   "Cross-Origin-Opener-Policy",
 ]) {
-  if (!worker.includes(header)) throw new Error(`Missing security header: ${header}`);
+  if (!nextConfig.includes(header)) throw new Error(`Missing security header: ${header}`);
 }
 
 console.log(`Security checks passed (${paths.length} content and application files scanned).`);

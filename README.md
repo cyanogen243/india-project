@@ -195,14 +195,12 @@ npm run check:security
 npm run typecheck
 npm run lint
 npm test
-npm run test:sites
 ```
 
-Deployment targets remain separate:
+The production build:
 
 ```sh
-npm run build          # standard Next.js / Vercel
-npm run build:sites    # OpenAI Sites / vinext
+npm run build
 ```
 
 No deployment or push is part of the local review workflow.
