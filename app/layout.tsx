@@ -5,8 +5,11 @@ import "@fontsource/inter/600.css";
 import "@fontsource/inter/700.css";
 import "./globals.css";
 
+// SITE_URL is server-side, so one image serves any environment. A
+// NEXT_PUBLIC_ value would be baked in at build time; it stays as a fallback
+// for deployments already setting it.
 function getSiteUrl() {
-  const configuredUrl = process.env.NEXT_PUBLIC_SITE_URL;
+  const configuredUrl = process.env.SITE_URL ?? process.env.NEXT_PUBLIC_SITE_URL;
   const vercelUrl =
     process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_URL;
   const value =

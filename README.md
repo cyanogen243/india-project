@@ -72,8 +72,12 @@ LIBSQL_AUTH_TOKEN=...
 SESSION_SECRET=...
 RATE_LIMIT_SECRET=...
 FEED_SIGNING_PRIVATE_KEY=...
-NEXT_PUBLIC_SITE_URL=https://your-domain.example
+SITE_URL=https://your-domain.example
 ```
+
+`SITE_URL` is read at runtime, so one container image serves every
+environment — the build carries no environment-specific value.
+`NEXT_PUBLIC_SITE_URL` is still honoured where it is already set.
 
 The native Vercel Turso integration can be used without renaming its injected
 variables. `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` are accepted as
