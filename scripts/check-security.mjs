@@ -45,17 +45,20 @@ for (const path of paths) {
   if (/next\/font\/google|fonts\.googleapis\.com/i.test(source)) {
     throw new Error(`${path}: third-party fonts are forbidden`);
   }
-  if (/<form/i.test(source)) {
-    const normalised = path.split("\\").join("/");
-    if (!approvedForms.some((approved) => normalised.endsWith(approved))) {
-      throw new Error(`${path}: unreviewed form surface`);
-    }
-    if (
-      /type=["']file["']/i.test(source) &&
-      !approvedUploadForms.some((approved) => normalised.endsWith(approved))
-    ) {
-      throw new Error(`${path}: file uploads remain forbidden on this form`);
-    }
+  const normalised = path.split("\\").join("/");
+  if (
+    /<form/i.test(source) &&
+    !approvedForms.some((approved) => normalised.endsWith(approved))
+  ) {
+    throw new Error(`${path}: unreviewed form surface`);
+  }
+  // Keyed on the input, not the form around it: an uploader wired straight to
+  // fetch never mentions <form> and is held to the same list.
+  if (
+    /type=["']file["']/i.test(source) &&
+    !approvedUploadForms.some((approved) => normalised.endsWith(approved))
+  ) {
+    throw new Error(`${path}: file uploads are forbidden on this surface`);
   }
 }
 

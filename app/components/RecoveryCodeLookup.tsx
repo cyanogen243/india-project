@@ -181,6 +181,7 @@ export function RecoveryCodeLookup({ language }: { language: Language }) {
             <button
               className="button button-danger"
               type="button"
+              disabled={state === "loading"}
               onClick={() => {
                 const confirmed = window.confirm(
                   hindi
