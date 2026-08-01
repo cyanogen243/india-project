@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import type { Language } from "@/app/lib/content";
 
 type Submission = {
@@ -36,33 +36,39 @@ const reasonLabels: Record<string, { en: string; hi: string }> = {
   other: { en: "Other", hi: "अन्य" },
 };
 
+/** What the server said, filed under the code that was asked about. */
+type Answer = {
+  code: string;
+  submission: Submission | null;
+  message: string;
+  failed: boolean;
+};
+
 export function RecoveryCodeLookup({ language }: { language: Language }) {
   const hindi = language === "hi";
   const [code, setCode] = useState("");
-  // A submission is held with the code that fetched it, so withdrawal — which
-  // is irreversible — acts on the card on screen rather than on whatever the
-  // field says when the button is pressed. Editing the field clears this, so
-  // the two cannot disagree; pairing them holds even if that ever changes.
-  const [result, setResult] = useState<{ code: string; submission: Submission } | null>(null);
-  const [state, setState] = useState<"idle" | "loading" | "error">("idle");
-  const [message, setMessage] = useState("");
-  const submission = result?.submission ?? null;
+  const [answer, setAnswer] = useState<Answer | null>(null);
+  const [checking, setChecking] = useState(false);
 
-  // Editing the field or starting another lookup supersedes whatever is still
-  // in flight, so a slow status response cannot put a card back that the field
-  // no longer matches. A withdrawal always reports its outcome: it has already
-  // happened on the server, and silence would leave that unsaid.
-  const latestRequest = useRef(0);
+  // An answer is shown only while the field still asks about its code. That
+  // one comparison is what keeps a reply that arrives late — after the field
+  // has moved on — from appearing beside a button that erases work for good.
+  // It is the keying a data-fetching library would do; here it is a line.
+  const shown = answer?.code === code ? answer : null;
+  const submission = shown?.submission ?? null;
+
+  // The server ignores case and punctuation when it reads a code, so the field
+  // does too: "a7x9-b2mz" and "A7X9B2MZ" name one submission here as well.
+  function asCode(value: string) {
+    return value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  }
 
   async function send(action: "status" | "withdraw") {
-    // Withdrawal acts on the submission on screen; a status check acts on
-    // whatever has been typed.
-    const target = action === "withdraw" ? result?.code : code;
+    // The card can only be on screen while it is the code in the field, so
+    // both actions carry that code and cannot reach different submissions.
+    const target = code;
     if (!target) return;
-    const requestId = ++latestRequest.current;
-    const superseded = () => action === "status" && requestId !== latestRequest.current;
-    setState("loading");
-    setMessage("");
+    setChecking(true);
     try {
       const response = await fetch("/api/contributions/lookup", {
         method: "POST",
@@ -71,29 +77,33 @@ export function RecoveryCodeLookup({ language }: { language: Language }) {
       });
       // A proxy refusing the request answers in HTML, not JSON.
       const value = await response.json().catch(() => null);
-      if (superseded()) return;
       if (!response.ok) {
         throw new Error(value?.error ?? (hindi ? "कुछ गड़बड़ हुई।" : "Something went wrong."));
       }
-      if (action === "withdraw") {
-        setResult((current) =>
-          current
-            ? { ...current, submission: { ...current.submission, status: "withdrawn" } }
-            : null,
-        );
-        setMessage(hindi ? "आपका योगदान हटा दिया गया।" : "Your contribution has been removed.");
-      } else {
-        setResult(value?.submission ? { code: target, submission: value.submission } : null);
-      }
-      setState("idle");
+      setAnswer({
+        code: target,
+        failed: false,
+        submission:
+          action === "withdraw"
+            ? submission && { ...submission, status: "withdrawn" }
+            : value?.submission ?? null,
+        message:
+          action === "withdraw"
+            ? hindi ? "आपका योगदान हटा दिया गया।" : "Your contribution has been removed."
+            : "",
+      });
     } catch (error) {
-      if (superseded()) return;
-      setState("error");
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : hindi ? "कुछ गड़बड़ हुई।" : "Something went wrong.",
-      );
+      setAnswer({
+        code: target,
+        failed: true,
+        submission: null,
+        message:
+          error instanceof Error
+            ? error.message
+            : hindi ? "कुछ गड़बड़ हुई।" : "Something went wrong.",
+      });
+    } finally {
+      setChecking(false);
     }
   }
 
@@ -111,17 +121,7 @@ export function RecoveryCodeLookup({ language }: { language: Language }) {
           <input
             className="lookup-code-input"
             value={code}
-            onChange={(event) => {
-              setCode(event.target.value.toUpperCase());
-              // The card belongs to the code that fetched it and carries a
-              // button that erases work for good, so it goes as soon as the
-              // field stops matching it — and any lookup still in flight is
-              // superseded, or its answer would put it straight back.
-              latestRequest.current += 1;
-              setResult(null);
-              setMessage("");
-              setState("idle");
-            }}
+            onChange={(event) => setCode(asCode(event.target.value))}
             placeholder="A7X9B2MZ"
             maxLength={16}
             required
@@ -129,15 +129,15 @@ export function RecoveryCodeLookup({ language }: { language: Language }) {
             spellCheck={false}
           />
         </label>
-        <button className="button button-primary" type="submit" disabled={state === "loading"}>
-          {state === "loading"
+        <button className="button button-primary" type="submit" disabled={checking}>
+          {checking
             ? hindi ? "देखा जा रहा है…" : "Checking…"
             : hindi ? "स्थिति देखें" : "Check status"}
         </button>
       </form>
 
-      <p aria-live="polite" className={state === "error" ? "admin-banner error" : ""}>
-        {message}
+      <p aria-live="polite" className={shown?.failed ? "admin-banner error" : ""}>
+        {shown?.message ?? ""}
       </p>
 
       {submission && (
@@ -181,7 +181,7 @@ export function RecoveryCodeLookup({ language }: { language: Language }) {
             <button
               className="button button-danger"
               type="button"
-              disabled={state === "loading"}
+              disabled={checking}
               onClick={() => {
                 const confirmed = window.confirm(
                   hindi
