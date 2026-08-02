@@ -39,26 +39,42 @@ const reasonLabels: Record<string, { en: string; hi: string }> = {
 export function RecoveryCodeLookup({ language }: { language: Language }) {
   const hindi = language === "hi";
   const [code, setCode] = useState("");
-  const [submission, setSubmission] = useState<Submission | null>(null);
+  // A submission is held with the code that fetched it, so withdrawal — which
+  // is irreversible — acts on the card on screen rather than on whatever the
+  // field says when the button is pressed. Editing the field clears this, so
+  // the two cannot disagree; pairing them holds even if that ever changes.
+  const [result, setResult] = useState<{ code: string; submission: Submission } | null>(null);
   const [state, setState] = useState<"idle" | "loading" | "error">("idle");
   const [message, setMessage] = useState("");
+  const submission = result?.submission ?? null;
 
   async function send(action: "status" | "withdraw") {
+    // Withdrawal acts on the submission on screen; a status check acts on
+    // whatever has been typed.
+    const target = action === "withdraw" ? result?.code : code;
+    if (!target) return;
     setState("loading");
     setMessage("");
     try {
       const response = await fetch("/api/contributions/lookup", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ code, action }),
+        body: JSON.stringify({ code: target, action }),
       });
-      const value = await response.json();
-      if (!response.ok) throw new Error(value.error ?? "Lookup failed");
+      // A proxy refusing the request answers in HTML, not JSON.
+      const value = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(value?.error ?? (hindi ? "कुछ गड़बड़ हुई।" : "Something went wrong."));
+      }
       if (action === "withdraw") {
-        setSubmission(submission ? { ...submission, status: "withdrawn" } : null);
+        setResult((current) =>
+          current
+            ? { ...current, submission: { ...current.submission, status: "withdrawn" } }
+            : null,
+        );
         setMessage(hindi ? "आपका योगदान हटा दिया गया।" : "Your contribution has been removed.");
       } else {
-        setSubmission(value.submission);
+        setResult(value?.submission ? { code: target, submission: value.submission } : null);
       }
       setState("idle");
     } catch (error) {
@@ -85,7 +101,14 @@ export function RecoveryCodeLookup({ language }: { language: Language }) {
           <input
             className="lookup-code-input"
             value={code}
-            onChange={(event) => setCode(event.target.value.toUpperCase())}
+            onChange={(event) => {
+              setCode(event.target.value.toUpperCase());
+              // The card belongs to the code that fetched it and carries a
+              // button that erases work for good, so it goes as soon as the
+              // field stops matching it.
+              setResult(null);
+              setMessage("");
+            }}
             placeholder="A7X9B2MZ"
             maxLength={16}
             required
