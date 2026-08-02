@@ -13,7 +13,6 @@ import { FreshSourceScan } from "./FreshSourceScan";
 import { CjpXFeed } from "./CjpXFeed";
 import { ShareReceipt } from "./ShareReceipt";
 import { SiteShell } from "./SiteShell";
-import { VolunteerForm } from "./VolunteerForm";
 import { ContributeForm } from "./ContributeForm";
 import { RecoveryCodeLookup } from "./RecoveryCodeLookup";
 import { ContributionGallery } from "./ContributionGallery";
@@ -26,7 +25,6 @@ export type PageKind =
   | "safety"
   | "reading-room"
   | "resources"
-  | "volunteer"
   | "art"
   | "contribute"
   | "corrections"
@@ -46,7 +44,6 @@ const titles: Record<Language, Record<PageKind, string>> = {
     safety: "Safety information",
     "reading-room": "Reading room",
     resources: "Partners and trusted resources",
-    volunteer: "Volunteer with The India Project",
     art: "Art & Writing",
     contribute: "Share your art",
     corrections: "Corrections and retractions",
@@ -65,7 +62,6 @@ const titles: Record<Language, Record<PageKind, string>> = {
     safety: "सुरक्षा सूचना",
     "reading-room": "पठन कक्ष",
     resources: "साझेदार और विश्वसनीय संसाधन",
-    volunteer: "द इंडिया प्रोजेक्ट के साथ स्वयंसेवा",
     art: "कला और लेखन",
     contribute: "अपनी कला साझा करें",
     corrections: "सुधार और वापसी",
@@ -136,9 +132,6 @@ function Home({ language, data }: { language: Language; data: ContentBundle }) {
             </a>
             <a className="button" href={hindi ? "/offline-pack/field-pack-hi.pdf" : "/offline-pack/field-pack-en.pdf"}>
               {hindi ? "ऑफलाइन फील्ड पैक" : "Offline field pack"}
-            </a>
-            <a className="button" href={hindi ? "/hi/volunteer" : "/volunteer"}>
-              {hindi ? "स्वयंसेवा करें" : "Volunteer with us"}
             </a>
           </div>
         </div>
@@ -546,29 +539,6 @@ function ContributePage({ language }: { language: Language }) {
   );
 }
 
-function VolunteerPage({ language }: { language: Language }) {
-  const hindi = language === "hi";
-  return (
-    <>
-      <PageHeader language={language} kind="volunteer" intro={hindi ? "अनुवाद, स्रोत समीक्षा, सुगम्यता, संपादकीय और तकनीकी काम में मदद करें। हम केवल आवश्यक जानकारी माँगते हैं।" : "Help with translation, source review, accessibility, editorial, or technical work. We ask only for the information we need."} />
-      <div className="volunteer-layout">
-        <aside>
-          <p className="eyebrow">{hindi ? "सुरक्षित भागीदारी" : "Safer participation"}</p>
-          <h2>{hindi ? "लोगों की शक्ति, सावधानी के साथ" : "People power, handled with care"}</h2>
-          <p>{hindi ? "आपको विरोध स्थल पर होने या संवेदनशील सामग्री साझा करने की जरूरत नहीं है। दूर से किया गया सावधान काम भी महत्वपूर्ण है।" : "You do not need to be at a protest site or share sensitive material. Careful remote work is valuable too."}</p>
-          <ul>
-            <li>{hindi ? "कोई फोन नंबर नहीं" : "No phone number requested"}</li>
-            <li>{hindi ? "कोई सटीक स्थान नहीं" : "No precise location requested"}</li>
-            <li>{hindi ? "कोई फ़ाइल अपलोड नहीं" : "No file uploads"}</li>
-            <li>{hindi ? "केवल अधिकृत एडमिन की पहुँच" : "Authorised admin access only"}</li>
-          </ul>
-        </aside>
-        <VolunteerForm language={language} />
-      </div>
-    </>
-  );
-}
-
 export async function PublicPage({
   language,
   kind,
@@ -588,7 +558,6 @@ export async function PublicPage({
     case "safety": content = <SafetyPage language={language} />; break;
     case "reading-room": content = <ReadingRoomPage language={language} data={data} />; break;
     case "resources": content = <ResourcesPage language={language} data={data} />; break;
-    case "volunteer": content = <VolunteerPage language={language} />; break;
     case "art": content = <ArtPage language={language} />; break;
     case "contribute": content = <ContributePage language={language} />; break;
     case "corrections": content = <CorrectionsPage language={language} data={data} />; break;

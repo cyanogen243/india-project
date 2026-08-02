@@ -24,6 +24,7 @@ import {
   releaseStoredObjects,
 } from "@/app/lib/stored-objects";
 import { buildSignedFeedRelease } from "@/app/lib/feed";
+import { remoteIdentifier } from "@/app/lib/request-identity";
 import type { Update } from "@/app/lib/content";
 
 export const dynamic = "force-dynamic";
@@ -36,14 +37,6 @@ function errorResponse(error: unknown, status = 400) {
         ? error.message
         : "Unable to complete the request";
   return NextResponse.json({ error: message }, { status });
-}
-
-function remoteIdentifier(request: NextRequest) {
-  return (
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    request.headers.get("cf-connecting-ip") ||
-    "unknown"
-  );
 }
 
 /**

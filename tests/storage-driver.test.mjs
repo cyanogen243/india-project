@@ -200,6 +200,21 @@ test("an approved upload is served back out of the bucket", async () => {
   const print = await fetch(`${baseUrl}/api/contributions/${id}/file`);
   assert.equal(print.status, 200, "the print variant serves from the bucket");
   assert.equal(print.headers.get("content-type"), "image/png");
+  assert.equal(
+    print.headers.get("content-length"),
+    null,
+    "print files stream instead of becoming a size-limited buffered Function response",
+  );
+  const storedRow = await db.execute({
+    sql: "SELECT storage_key FROM contributions WHERE id = ?",
+    args: [id],
+  });
+  const expectedPrint = s3.get(String(storedRow.rows[0].storage_key)).bytes;
+  assert.deepEqual(
+    Buffer.from(await print.arrayBuffer()),
+    Buffer.from(expectedPrint),
+    "streaming does not alter the stored print file",
+  );
   const social = await fetch(`${baseUrl}/api/contributions/${id}/file?variant=social`);
   assert.equal(social.status, 200, "and so does the social variant");
   assert.equal(social.headers.get("content-type"), "image/jpeg");

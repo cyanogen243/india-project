@@ -29,6 +29,11 @@ export type StoredObject = {
   contentType: string;
 };
 
+export type StreamedObject = {
+  stream: ReadableStream<Uint8Array>;
+  contentType: string;
+};
+
 const LOCAL_ROOT = resolve("data/uploads");
 
 // Keys are generated server-side and never derived from user input. Validating
@@ -157,6 +162,46 @@ export async function getObject(key: string): Promise<StoredObject | null> {
   try {
     const bytes = await readFile(localPath(key));
     return { bytes: new Uint8Array(bytes), contentType: contentTypeForKey(key) };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Streams an object to an HTTP response without buffering it into the response
+ * payload. Vercel caps buffered Function responses at 4.5 MB, while printable
+ * artwork can legitimately be larger. A Web Stream keeps the self-hosted proxy
+ * and its privacy/removal guarantees without turning large downloads into 500s.
+ */
+export async function streamObject(key: string): Promise<StreamedObject | null> {
+  assertKey(key);
+  const s3 = getS3();
+  if (s3) {
+    const { client, module, bucket } = await s3;
+    try {
+      const result = await client.send(
+        new module.GetObjectCommand({ Bucket: bucket, Key: key }),
+      );
+      if (!result.Body) return null;
+      return {
+        stream: result.Body.transformToWebStream(),
+        contentType: result.ContentType ?? contentTypeForKey(key),
+      };
+    } catch {
+      return null;
+    }
+  }
+  try {
+    const bytes = new Uint8Array(await readFile(localPath(key)));
+    return {
+      stream: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(bytes);
+          controller.close();
+        },
+      }),
+      contentType: contentTypeForKey(key),
+    };
   } catch {
     return null;
   }

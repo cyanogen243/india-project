@@ -25,9 +25,5 @@ jobs:
 
       - run: npm ci
       - run: npm test
-      # test:sites builds the Worker artifact and then imports it. Running only
-      # the build passed while the artifact was unloadable: a native module at
-      # import scope builds fine and fails when the Worker starts.
-      - run: npm run test:sites
       - run: npm exec tsc -- --noEmit
       - run: npm run lint

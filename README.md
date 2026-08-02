@@ -7,8 +7,9 @@ student-movement and civic information in India.
 
 The public site combines reviewed updates, demands, government responses,
 timelines, safety material, corrections, trusted resources, offline packs, a
-signed feed, and a privacy-conscious volunteer form. It does not publish live
-locations, accept evidence files, or expose the private admin workspace.
+signed feed, and a private volunteer-record workspace. Public volunteer intake
+is currently closed. It does not publish live locations, accept evidence files,
+or expose the private admin workspace.
 
 ## Local setup
 
@@ -22,8 +23,9 @@ npm run admin:bootstrap
 npm run dev
 ```
 
-Open `http://localhost:3000`. The public site is at `/`, volunteer intake is at
-`/volunteer`, and the protected workspace is at `/admin`.
+Open `http://localhost:3000`. The public site is at `/`, and the protected
+workspace is at `/admin`. Public volunteer intake is currently closed; existing
+submissions remain available to administrators in the Volunteers tab.
 
 `npm run dev` runs the idempotent database setup automatically. The standalone
 default is `file:./data/the-india-project.db`; database files and secrets are
@@ -50,11 +52,10 @@ be replaced at first sign-in.
    name, and a strong password when prompted. Password input is hidden.
 2. Run `npm run dev`, then open `http://localhost:3000/admin`.
 3. Sign in with the bootstrap credentials.
-4. Submit a test record at `/volunteer`, return to `/admin`, and open the
-   **Volunteers** tab. The record should appear with its email, contact platform,
-   handle, skills, languages, availability, and note.
-5. Change its status or internal notes and save. The change is written to the
-   database and recorded in the audit log.
+4. Open the **Volunteers** tab to review existing records. Public volunteer
+   intake is currently closed, so no new public submissions can be created.
+5. Change an existing record's status or internal notes and save. The change is
+   written to the database and recorded in the audit log.
 
 Local bootstrap credentials and the SQLite database remain ignored by Git. Use
 separate production credentials and Turso/libSQL environment values on Vercel.
@@ -84,6 +85,24 @@ The native Vercel Turso integration can be used without renaming its injected
 variables. `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` are accepted as
 production fallbacks when the corresponding `LIBSQL_*` values are absent.
 
+### Identifying a visitor behind the proxies
+
+Production serves `theindiaproject.net` through **Cloudflare in front of
+Vercel** — every response carries both a `cf-ray` and an `x-vercel-id`. Rate
+limits key on who the caller is, so the application reads `CF-Connecting-IP`,
+which Cloudflare sets on every request, overwriting what the caller sent.
+There is nothing to configure.
+
+`X-Forwarded-For` cannot serve here: Cloudflare appends to it and Vercel
+appends behind that, so its trailing entry is the Cloudflare edge — one
+identity shared by everyone routed through it — and its leading entry is the
+caller's to choose.
+
+Keep Cloudflare the only public route in, so that identity holds: on Vercel, do
+not leave a `*.vercel.app` alias publicly reachable; on a self-hosted origin,
+restrict the host to Cloudflare's published ranges. Both are standard hardening,
+and worth reconfirming whenever the deployment changes.
+
 Use a different high-entropy value for each secret. Rotate a session secret by
 replacing it and revoking sessions; rotate the rate-limit secret independently.
 Changing the Ed25519 feed key changes the public verification identity, so
@@ -105,11 +124,11 @@ SameSite-strict cookies. Mutations require a session-bound CSRF token. Passwords
 use salted PBKDF2-HMAC-SHA256 with 600,000 iterations, failed logins perform the
 same derivation work for known and unknown accounts, and attempts are throttled.
 
-Volunteer intake collects only a name or alias, email, contact platform and
-handle, skills, languages, availability, a short note, and consent. Contact
-platforms are limited to WhatsApp, Telegram, and Discord; the form asks for a
-handle rather than a phone number. It deliberately omits IDs, files, and precise
-locations. An admin can delete a record outright at any time.
+Existing volunteer records contain only a name or alias, email, contact platform
+and handle, skills, languages, availability, a short note, and consent. Contact
+platforms are limited to WhatsApp, Telegram, and Discord; records use a handle
+rather than a phone number and omit IDs, files, and precise locations. An admin
+can update or delete a record outright at any time.
 
 Editorial content is saved as drafts and published per collection. Existing
 source tiers, bilingual parity, timestamps, reviewer requirements, unsafe HTML,
@@ -159,6 +178,10 @@ Two commands support the contribution wall:
 
 - `npm run seed:art` loads the opening collection. Run once per database, with
   the object-storage variables set.
+- `npm run check:storage` proves a bucket before a deploy trusts it: it writes,
+  reads back, deletes, and confirms the object is gone. The automated tests
+  exercise the storage driver against an in-memory stand-in, so this is the
+  only check that exercises real credentials, region and signing.
 
 ## Validation
 
@@ -169,14 +192,17 @@ npm run check:security
 npm run typecheck
 npm run lint
 npm test
-npm run test:sites
 ```
 
-Deployment targets remain separate:
+The production build:
 
 ```sh
-npm run build          # standard Next.js / Vercel
-npm run build:sites    # OpenAI Sites / vinext
+npm run build
 ```
+
+On Vercel, a Production build first checks object-storage put/get/delete,
+applies the additive database schema, and idempotently seeds the opening art
+collection. Preview and local builds skip that production preparation so they
+cannot mutate the live Turso database.
 
 No deployment or push is part of the local review workflow.
