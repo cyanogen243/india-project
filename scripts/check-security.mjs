@@ -23,7 +23,6 @@ for await (const path of glob(["app/**/*.{ts,tsx}", "content/**/*.json"], {
 // Every form surface stays on this list so adding one remains a deliberate,
 // reviewed act.
 const approvedForms = [
-  "app/components/VolunteerForm.tsx",
   "app/components/ContributeForm.tsx",
   "app/components/RecoveryCodeLookup.tsx",
   "app/admin/AdminApp.tsx",

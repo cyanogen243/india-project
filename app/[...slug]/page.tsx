@@ -8,7 +8,6 @@ const kinds = [
   "safety",
   "reading-room",
   "resources",
-  "volunteer",
   "art",
   "contribute",
   "corrections",

@@ -12,7 +12,6 @@ const nav = {
     ["Share receipts", "/receipts"],
     ["Partners & resources", "/resources"],
     ["Art & writing", "/art"],
-    ["Volunteer", "/volunteer"],
     ["Reading room", "/reading-room"],
   ],
   hi: [
@@ -23,7 +22,6 @@ const nav = {
     ["रसीद साझा करें", "/hi/receipts"],
     ["साझेदार व संसाधन", "/hi/resources"],
     ["कला व लेखन", "/hi/art"],
-    ["स्वयंसेवा", "/hi/volunteer"],
     ["पठन कक्ष", "/hi/reading-room"],
   ],
 } satisfies Record<Language, string[][]>;

@@ -7,8 +7,9 @@ student-movement and civic information in India.
 
 The public site combines reviewed updates, demands, government responses,
 timelines, safety material, corrections, trusted resources, offline packs, a
-signed feed, and a privacy-conscious volunteer form. It does not publish live
-locations, accept evidence files, or expose the private admin workspace.
+signed feed, and a private volunteer-record workspace. Public volunteer intake
+is currently closed. It does not publish live locations, accept evidence files,
+or expose the private admin workspace.
 
 ## Local setup
 
@@ -22,8 +23,9 @@ npm run admin:bootstrap
 npm run dev
 ```
 
-Open `http://localhost:3000`. The public site is at `/`, volunteer intake is at
-`/volunteer`, and the protected workspace is at `/admin`.
+Open `http://localhost:3000`. The public site is at `/`, and the protected
+workspace is at `/admin`. Public volunteer intake is currently closed; existing
+submissions remain available to administrators in the Volunteers tab.
 
 `npm run dev` runs the idempotent database setup automatically. The standalone
 default is `file:./data/the-india-project.db`; database files and secrets are
@@ -50,11 +52,10 @@ be replaced at first sign-in.
    name, and a strong password when prompted. Password input is hidden.
 2. Run `npm run dev`, then open `http://localhost:3000/admin`.
 3. Sign in with the bootstrap credentials.
-4. Submit a test record at `/volunteer`, return to `/admin`, and open the
-   **Volunteers** tab. The record should appear with its email, contact platform,
-   handle, skills, languages, availability, and note.
-5. Change its status or internal notes and save. The change is written to the
-   database and recorded in the audit log.
+4. Open the **Volunteers** tab to review existing records. Public volunteer
+   intake is currently closed, so no new public submissions can be created.
+5. Change an existing record's status or internal notes and save. The change is
+   written to the database and recorded in the audit log.
 
 Local bootstrap credentials and the SQLite database remain ignored by Git. Use
 separate production credentials and Turso/libSQL environment values on Vercel.
@@ -123,11 +124,11 @@ SameSite-strict cookies. Mutations require a session-bound CSRF token. Passwords
 use salted PBKDF2-HMAC-SHA256 with 600,000 iterations, failed logins perform the
 same derivation work for known and unknown accounts, and attempts are throttled.
 
-Volunteer intake collects only a name or alias, email, contact platform and
-handle, skills, languages, availability, a short note, and consent. Contact
-platforms are limited to WhatsApp, Telegram, and Discord; the form asks for a
-handle rather than a phone number. It deliberately omits IDs, files, and precise
-locations. An admin can delete a record outright at any time.
+Existing volunteer records contain only a name or alias, email, contact platform
+and handle, skills, languages, availability, a short note, and consent. Contact
+platforms are limited to WhatsApp, Telegram, and Discord; records use a handle
+rather than a phone number and omit IDs, files, and precise locations. An admin
+can update or delete a record outright at any time.
 
 Editorial content is saved as drafts and published per collection. Existing
 source tiers, bilingual parity, timestamps, reviewer requirements, unsafe HTML,

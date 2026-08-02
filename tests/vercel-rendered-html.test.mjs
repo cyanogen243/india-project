@@ -61,7 +61,7 @@ test("renders the Vercel-ready public-interest homepage", async () => {
   );
   assert.match(html, /Safe · Verified · People powered/i);
   assert.match(html, /exam-accountability movement continues/i);
-  assert.match(html, /Volunteer with us/i);
+  assert.doesNotMatch(html, /href="(?:\/hi)?\/volunteer|Volunteer with us/i);
   assert.match(html, /What is happening, and why it matters/i);
   assert.match(html, /href="\/resources">Partners &amp; resources</i);
   assert.match(html, /People-powered reach/i);
@@ -76,27 +76,20 @@ test("renders the Vercel-ready public-interest homepage", async () => {
   );
 });
 
-test("renders Hindi and keeps removed or hidden routes unavailable", async () => {
-  const [hindi, volunteer, removedLegal, hiddenMediaArchive] = await Promise.all([
+test("renders Hindi and keeps closed or hidden routes unavailable", async () => {
+  const [hindi, volunteer, hiddenHindiVolunteer, removedLegal, hiddenMediaArchive] = await Promise.all([
     render("/hi"),
     render("/volunteer"),
+    render("/hi/volunteer"),
     render("/legal"),
     render("/hall-of-shame"),
   ]);
 
   assert.equal(hindi.status, 200);
-  assert.equal(volunteer.status, 200);
+  assert.equal(volunteer.status, 404);
+  assert.equal(hiddenHindiVolunteer.status, 404);
   assert.equal(removedLegal.status, 404);
   assert.equal(hiddenMediaArchive.status, 404);
-  assert.match(await hindi.text(), /स्वयंसेवा करें/i);
-  const volunteerHtml = await volunteer.text();
-  assert.match(volunteerHtml, /How can you help\?/i);
-  assert.match(volunteerHtml, /Research and fact-checking/i);
-  assert.match(volunteerHtml, /On-the-ground help in my city/i);
-  assert.doesNotMatch(volunteerHtml, /Which team would you like to join/i);
-  assert.match(volunteerHtml, /WhatsApp/i);
-  assert.match(volunteerHtml, /Telegram/i);
-  assert.match(volunteerHtml, /Discord/i);
 
   const resourcesHtml = await (await render("/resources")).text();
   assert.match(resourcesHtml, /Partner links/i);
@@ -129,6 +122,8 @@ test("serves the receipts page, and an evidence page that takes no uploads", asy
 
 test("keeps admin, API, and live page visits out of stale service-worker caches", async () => {
   const worker = await readFile(path.join(process.cwd(), "public", "sw.js"), "utf8");
+  assert.match(worker, /the-india-project-v7/);
+  assert.doesNotMatch(worker, /\/volunteer/);
   assert.match(worker, /url\.pathname\.startsWith\("\/api\/"\)/);
   assert.match(worker, /url\.pathname === "\/admin"/);
   assert.match(worker, /url\.searchParams\.has\("_rsc"\)/);
@@ -195,71 +190,14 @@ test("counts repeat visitors once per network per day without raw identifiers", 
   );
 });
 
-test("accepts volunteers and enforces the audited admin workflow", async () => {
-  const invalidVolunteerResponse = await fetch(`${baseUrl}/api/volunteers`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-forwarded-for": "203.0.113.19",
-    },
-    body: JSON.stringify({
-      name: "Test",
-      email: "test@example.com",
-      contactPlatform: "discord",
-      contactHandle: "sad",
-      city: "Bengaluru",
-      skills: ["translation", "technical"],
-      languages: ["English"],
-      availability: "S",
-      note: "I would like to support the volunteer team remotely.",
-      language: "en",
-      consent: true,
-      website: "",
-      startedAt: Date.now() - 5_000,
-    }),
-  });
-  assert.equal(invalidVolunteerResponse.status, 400);
-  const invalidVolunteer = await invalidVolunteerResponse.json();
-  assert.equal(invalidVolunteer.field, "availability");
-  assert.match(invalidVolunteer.error, /Availability must be between 2 and 160/);
-
-  const volunteerResponse = await fetch(`${baseUrl}/api/volunteers`, {
+test("keeps volunteer intake closed and enforces the audited admin workflow", async () => {
+  const closedVolunteerResponse = await fetch(`${baseUrl}/api/volunteers`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      name: "Review Volunteer",
-      email: "volunteer@example.test",
-      contactPlatform: "telegram",
-      contactHandle: "@reviewvolunteer",
-      city: "New Delhi",
-      skills: ["research", "technical", "on-ground"],
-      languages: ["English", "Hindi"],
-      availability: "Three hours each week",
-      note: "I can review sources and help prepare clear bilingual summaries.",
-      language: "en",
-      consent: true,
-      website: "",
-      startedAt: Date.now() - 5000,
-    }),
+    body: "{}",
   });
-  assert.equal(volunteerResponse.status, 201);
-
-  const testDatabase = createClient({ url: `file:${testDbPath}` });
-  const persistedVolunteer = await testDatabase.execute({
-    sql: `SELECT email, contact_platform, contact_handle, city, team, skills_json
-          FROM volunteer_submissions WHERE email = ?`,
-    args: ["volunteer@example.test"],
-  });
-  testDatabase.close();
-  assert.equal(persistedVolunteer.rows.length, 1);
-  assert.equal(persistedVolunteer.rows[0].contact_platform, "telegram");
-  assert.equal(persistedVolunteer.rows[0].contact_handle, "@reviewvolunteer");
-  assert.deepEqual(
-    JSON.parse(String(persistedVolunteer.rows[0].skills_json)),
-    ["research", "technical", "on-ground"],
-  );
-  assert.equal(persistedVolunteer.rows[0].city, "New Delhi");
-  assert.equal(persistedVolunteer.rows[0].team, "");
+  assert.equal(closedVolunteerResponse.status, 410);
+  assert.match((await closedVolunteerResponse.json()).error, /closed/i);
 
   const anonymous = await fetch(`${baseUrl}/api/admin`);
   assert.deepEqual(await anonymous.json(), { authenticated: false });
@@ -297,23 +235,6 @@ test("accepts volunteers and enforces the audited admin workflow", async () => {
   const initial = await fetch(`${baseUrl}/api/admin`, { headers: { cookie } });
   const adminData = await initial.json();
   assert.equal(adminData.user.role, "super_admin");
-  assert.equal(adminData.volunteers[0].email, "volunteer@example.test");
-  assert.equal(adminData.volunteers[0].contactPlatform, "telegram");
-  assert.equal(adminData.volunteers[0].contactHandle, "@reviewvolunteer");
-  assert.equal(adminData.volunteers[0].city, "New Delhi");
-  assert.deepEqual(adminData.volunteers[0].skills, [
-    "research",
-    "technical",
-    "on-ground",
-  ]);
-
-  const volunteerUpdate = await adminRequest({
-    action: "volunteer_update",
-    id: adminData.volunteers[0].id,
-    status: "contacted",
-    internalNotes: "Initial review complete.",
-  });
-  assert.equal(volunteerUpdate.response.status, 200);
 
   const createdAdmin = await adminRequest({
     action: "user_create",
