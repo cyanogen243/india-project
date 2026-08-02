@@ -1,8 +1,8 @@
 name: build-image
 
 # Build and publish versioned container images.
-#   every push: image variants pushed to GHCR (sha-tagged)
-#   main only: semantic-release mints vX.Y.Z and aliases the same images
+#   each push to main: one sha-tagged image pushed to GHCR
+#   then: semantic-release mints vX.Y.Z and tags that same image
 
 on:
   push:
@@ -13,8 +13,35 @@ permissions:
   contents: read
   packages: write
 
+# Releases are minted from an ordered history; runs for successive pushes
+# queue rather than race the tag.
+concurrency:
+  group: build-image-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  # The same gate as ci.yml: nothing is published from a commit that fails it.
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      VERIFY_COMMITTED_FEED_ONLY: "true"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm exec tsc -- --noEmit
+      - run: npm run lint
+
   build:
+    # Also on workflow_dispatch, which can be aimed at any branch: nothing is
+    # published from a commit that is not on main.
+    if: github.ref == 'refs/heads/main'
+    needs: test
     runs-on: ubuntu-latest
     outputs:
       shortsha: ${{ steps.vars.outputs.shortsha }}
@@ -28,29 +55,37 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      # NEXT_PUBLIC_* values are baked at build time, so each environment gets
-      # its own image variant. Releases alias these — nothing builds twice.
-      - name: Build staging-baked image
+      - name: Build image
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
-          build-args: |
-            NEXT_PUBLIC_SITE_URL=http://localhost:3000
           tags: |
-            ghcr.io/${{ github.repository }}:staging-${{ steps.vars.outputs.shortsha }}
+            ghcr.io/${{ github.repository }}:${{ steps.vars.outputs.shortsha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - name: Build production-baked image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          build-args: |
-            NEXT_PUBLIC_SITE_URL=https://www.theindiaproject.net
-          tags: |
-            ghcr.io/${{ github.repository }}:prod-${{ steps.vars.outputs.shortsha }}
-          cache-from: type=gha
+
+      # The tests above run on the runner, never in the image. Starting it is
+      # the check: the server verifies its own native dependencies before it
+      # serves anything, so an image missing them never answers this request.
+      - name: Start the pushed image and serve one request
+        run: |
+          set -euo pipefail
+          IMAGE="ghcr.io/${{ github.repository }}:${{ steps.vars.outputs.shortsha }}"
+          docker run --rm --user node "$IMAGE" touch .next/cache/probe
+          docker run -d --name smoke -p 3000:3000 \
+            -e LIBSQL_URL=file:/tmp/smoke.db \
+            -e SESSION_SECRET=smoke-session-secret-not-for-production \
+            -e RATE_LIMIT_SECRET=smoke-rate-limit-secret-not-for-production \
+            -e SITE_URL=https://smoke.invalid "$IMAGE"
+          for _ in $(seq 30); do
+            curl -fsS -o /dev/null http://localhost:3000/ && break || sleep 1
+          done
+          curl -fsS -o /dev/null http://localhost:3000/ || { docker logs smoke; exit 1; }
+          docker rm -f smoke
 
   release:
     if: github.ref == 'refs/heads/main'
@@ -66,27 +101,30 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+          cache: npm
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # From the lockfile, not resolved at run time: this job holds a token
+      # that can write releases and packages, so every transitive dependency
+      # it executes is one the repository has committed to.
+      - run: npm ci
       - name: semantic-release (tag + GitHub Release from conventional commits)
-        run: npx --yes -p conventional-changelog-conventionalcommits -p semantic-release@24 semantic-release
+        run: npx semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      # Idempotent: whatever the latest release is, make sure its image
-      # aliases exist. Self-heals releases stranded by earlier failures.
-      - name: Ensure the latest release has image aliases (no rebuild)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Read from the tag semantic-release just put on this commit, not from
+      # whichever release GitHub considers latest: releases minted before this
+      # workflow existed have no image to point at, and a run that mints
+      # nothing must not try to tag one. Re-running the job repeats the alias
+      # harmlessly.
+      - name: Give the built image its version tag (no rebuild)
         run: |
-          V=$(gh api "repos/${{ github.repository }}/releases/latest" --jq .tag_name 2>/dev/null || true)
-          [ -n "$V" ] || { echo "no releases yet"; exit 0; }
-          if docker manifest inspect "ghcr.io/${{ github.repository }}:$V" > /dev/null 2>&1; then
-            echo "$V already aliased"; exit 0
-          fi
-          git fetch --tags -q
-          S=$(git rev-parse --short=7 "$V")
-          docker buildx imagetools create -t "ghcr.io/${{ github.repository }}:$V" "ghcr.io/${{ github.repository }}:prod-$S"
-          docker buildx imagetools create -t "ghcr.io/${{ github.repository }}:$V-staging" "ghcr.io/${{ github.repository }}:staging-$S"
+          set -euo pipefail
+          V=$(git tag --points-at HEAD | grep -E '^v[0-9]' | head -n1 || true)
+          if [ -z "$V" ]; then echo "this run minted no release"; exit 0; fi
+          IMAGE="ghcr.io/${{ github.repository }}"
+          docker buildx imagetools create -t "$IMAGE:$V" "$IMAGE:${GITHUB_SHA::7}"
+          echo "tagged $IMAGE:$V"
