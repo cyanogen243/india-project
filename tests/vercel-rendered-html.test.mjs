@@ -47,10 +47,11 @@ test("renders the Vercel-ready public-interest homepage", async () => {
   const response = await render("/");
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
-  assert.match(
-    response.headers.get("content-security-policy") ?? "",
-    /default-src 'self'/,
-  );
+  const csp = response.headers.get("content-security-policy") ?? "";
+  assert.match(csp, /default-src 'self'/);
+  // The X embeds depend on these two allowances staying in the served policy.
+  assert.match(csp, /script-src[^;]*https:\/\/platform\.twitter\.com/);
+  assert.match(csp, /frame-src[^;]*https:\/\/platform\.twitter\.com/);
   assert.equal(response.headers.get("referrer-policy"), "no-referrer");
 
   const html = await response.text();

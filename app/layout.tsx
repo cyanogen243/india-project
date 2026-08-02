@@ -9,11 +9,13 @@ import "./globals.css";
 // NEXT_PUBLIC_ value would be baked in at build time; it stays as a fallback
 // for deployments already setting it.
 function getSiteUrl() {
-  const configuredUrl = process.env.SITE_URL ?? process.env.NEXT_PUBLIC_SITE_URL;
+  // || not ??: an env block that sets the variable to nothing means "unset",
+  // and new URL("") would take the site down at module load.
+  const configuredUrl = process.env.SITE_URL || process.env.NEXT_PUBLIC_SITE_URL;
   const vercelUrl =
-    process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_URL;
+    process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL;
   const value =
-    configuredUrl ?? (vercelUrl ? `https://${vercelUrl}` : "http://localhost:3000");
+    configuredUrl || (vercelUrl ? `https://${vercelUrl}` : "http://localhost:3000");
 
   return new URL(value);
 }
